@@ -5,7 +5,7 @@ import logging
 import scipy.special
 import scipy.ndimage
 from astropy.io import fits
-from optparse import OptionParser
+from argparse import ArgumentParser
 from scipy.ndimage.morphology import binary_dilation
 
 def create_logger():
@@ -22,7 +22,7 @@ def create_logger():
 LOGGER = create_logger()
 
 def get_image(fitsfile):
-    LOGGER.info(f"Reading {fitsfile}")
+    LOGGER.info(f"Reading {fitsfile} data")
     input_hdu = fits.open(fitsfile)[0]
     if len(input_hdu.data.shape) == 2:
         image = numpy.array(input_hdu.data[:, :])
@@ -32,8 +32,13 @@ def get_image(fitsfile):
         image = numpy.array(input_hdu.data[0, 0, :, :])
     return image
 
+def get_image_header(fitsfile):
+    LOGGER.info(f"Reading {fitsfile} header")
+    input_hdu = fits.open(fitsfile)[0]
+    return input_hdu.header
 
-def flush_fits(newimage, fitsfile):
+
+def flush_fits(newimage, fitsfile, header=None):
     LOGGER.info(f"Writing {fitsfile}")
     f = fits.open(fitsfile, mode='update')
     input_hdu = f[0]
@@ -43,6 +48,8 @@ def flush_fits(newimage, fitsfile):
         input_hdu.data[0, :, :] = newimage
     else:
         input_hdu.data[0, 0, :, :] = newimage
+    if header:
+        input_hdu.header = header
     f.flush()
 
 
@@ -72,51 +79,99 @@ def main():
     from pkg_resources import get_distribution
     _version = get_distribution('breizorro').version
     LOGGER.info(f"Version: {_version}")
-    parser = OptionParser(usage = '%prog [options] restored_image')
-    parser.add_option('--threshold', dest = 'threshold', help = 'Sigma threshold for masking (default = 6.5)', default = 6.5)
-    parser.add_option('--boxsize', dest = 'boxsize', help = 'Box size over which to compute stats (default = 50)', default = 50)
-    parser.add_option('--dilate', dest = 'dilate', help = 'Number of iterations of binary dilation (default = 0)', default = 0)
-    parser.add_option('--savenoise', dest = 'savenoise', help = 'Enable to export noise image as FITS file (default = do not save noise image)', action = 'store_true', default = False)
-    parser.add_option('--outfile', dest = 'outfile', help = 'Suffix for mask image (default = restored_image.replace(".fits",".mask.fits"))', default = '')
-    (options,args) = parser.parse_args()
-    threshold = float(options.threshold)
-    boxsize = int(options.boxsize)
-    dilate = int(options.dilate)
-    savenoise = options.savenoise
-    outfile = options.outfile
+    LOGGER.info("Usage: breizorro --help")
+    parser = ArgumentParser(description='breizorro [options] --image restored_image')
+    parser.add_argument('--restored-image', dest="imagename", required=False,
+                        help="Restored image file")
+    parser.add_argument('--mask-image', dest="maskname", required=False,
+                        help="Input mask file")
+    parser.add_argument('--threshold', dest='threshold', default=6.5,
+                        help='Sigma threshold for masking (default = 6.5)')
+    parser.add_argument('--boxsize', dest='boxsize', default=50,
+                        help='Box size over which to compute stats (default = 50)')
+    parser.add_argument('--dilate', dest='dilate', default=0,
+                        help='Number of iterations of binary dilation (default=0)')
+    parser.add_argument('--number-islands', dest='islands', action='store_true', default=False,
+                        help='Number the islands detected (default=do not number islands)')
+    parser.add_argument('--remove-islands', dest='remove_isl', metavar='N', type=int, nargs='+',
+                         help='List of islands to remove from input mask. e.g. --remove-islands 1,18,20')
+    parser.add_argument('--savenoise', dest='savenoise', action = 'store_true', default = False,
+                        help='Enable to export noise image as FITS file (default=do not save noise image)')
+    parser.add_argument('--outfile', dest='outfile', default='',
+                        help='Suffix for mask image (default=restored_image.replace(".fits",".mask.fits"))')
+    args = parser.parse_args()
+    threshold = float(args.threshold)
+    boxsize = int(args.boxsize)
+    dilate = int(args.dilate)
+    savenoise = args.savenoise
+    outfile = args.outfile
 
-    if len(args) != 1:
+    if not args.imagename and not args.maskname:
         LOGGER.info("Please specify a FITS file")
         sys.exit()
-    else:
-        input_fits = args[0].rstrip('/')
 
-    input_image = get_image(input_fits)
 
-    noise_image = make_noise_map(input_image, boxsize)
-    if savenoise:
-        noise_fits = input_fits.replace('.fits', '.noise.fits')
-        shutil.copyfile(input_fits, noise_fits)
-        flush_fits(noise_image, noise_fits)
+    if args.imagename:
+        input_fits = args.imagename.rstrip('/')
+        input_image = get_image(input_fits)
 
-    mask_image = input_image > threshold * noise_image
+        noise_image = make_noise_map(input_image, boxsize)
+        if savenoise:
+            noise_fits = input_fits.replace('.fits', '.noise.fits')
+            shutil.copyfile(input_fits, noise_fits)
+            flush_fits(noise_image, noise_fits)
 
-    mask_image[:, -1]=0
-    mask_image[:, 0]=0
-    mask_image[0, :]=0
-    mask_image[-1, :]=0
+        mask_image = input_image > threshold * noise_image
 
-    if dilate != 0:
-        LOGGER.info(f"Dilation mask, {dilate} iteration(s)")
-        dilated = binary_dilation(input = mask_image, iterations = dilate)
-        mask_image = dilated
+        mask_image[:, -1]=0
+        mask_image[:, 0]=0
+        mask_image[0, :]=0
+        mask_image[-1, :]=0
+    
+        if dilate != 0:
+            LOGGER.info(f"Dilation mask, {dilate} iteration(s)")
+            dilated = binary_dilation(input=mask_image, iterations=dilate)
+            mask_image = dilated
 
-    if outfile == '':
-        mask_fits = input_fits.replace('.fits', '.mask.fits')
-    else:
-        mask_fits = outfile
-    shutil.copyfile(input_fits, mask_fits)
+        if outfile == '':
+            out_mask_fits = input_fits.replace('.fits', '.mask.fits')
+        else:
+            out_mask_fits = outfile
 
-    flush_fits(mask_image, mask_fits)
+        shutil.copyfile(input_fits, out_mask_fits)
+        flush_fits(mask_image, out_mask_fits)
+
+    if args.maskname:
+        input_fits = args.maskname.rstrip('/')
+        input_mask_image = get_image(args.maskname)
+        mask_header = get_image_header(args.maskname)
+        isl_id = 0
+        if args.islands:
+            r = 0
+            for row in input_mask_image:
+                c = 0
+                for val in row:
+                    if val==1:
+                        input_mask_image[input_mask_image==1] = isl_id
+                        mask_header['BUNIT'] = 'source_ID' 
+                    c+=1
+                    isl_id+=1
+                r+=1
+            LOGGER.info(f"Number of islands: {isl_id}")
+        elif args.remove_isl:
+            input_mask_image[input_mask_image==args.remove_isl] = 0
+        else:
+            input_mask_image[input_mask_image>1] = 1
+            mask_header['BUNIT'] = 'Jy/beam'
+
+        mask_image=input_mask_image
+        if outfile == '':
+            out_mask_fits = input_fits.replace('.fits', '_isl.fits')
+        else:
+            out_mask_fits = outfile
+
+        shutil.copyfile(input_fits, out_mask_fits)
+        flush_fits(mask_image, out_mask_fits, mask_header)
+
 
     LOGGER.info("Done")

@@ -6,6 +6,7 @@ import scipy.special
 import scipy.ndimage
 from astropy.io import fits
 from argparse import ArgumentParser
+from scipy.ndimage.measurements import label
 from scipy.ndimage.morphology import binary_dilation
 
 def create_logger():
@@ -145,23 +146,19 @@ def main():
         input_fits = args.maskname.rstrip('/')
         input_mask_image = get_image(args.maskname)
         mask_header = get_image_header(args.maskname)
-        isl_id = 0
         if args.islands:
-            r = 0
-            for row in input_mask_image:
-                c = 0
-                for val in row:
-                    if val==1:
-                        input_mask_image[input_mask_image==1] = isl_id
-                        mask_header['BUNIT'] = 'source_ID' 
-                    c+=1
-                    isl_id+=1
-                r+=1
-            LOGGER.info(f"Number of islands: {isl_id}")
+            input_mask_image = input_mask_image.byteswap().newbyteorder()
+            labeled_mask, num_features = label(input_mask_image)
+            input_mask_image = labeled_mask
+            mask_header['BUNIT'] = 'source_ID'
+            LOGGER.info(f"Number of islands: {num_features}")
         elif args.remove_isl:
-            input_mask_image[input_mask_image==args.remove_isl] = 0
+            LOGGER.info(f"Removing islands: {args.remove_isl}")
+            for isl in args.remove_isl:
+                input_mask_image = numpy.where(input_mask_image==isl, 0, input_mask_image)
         else:
-            input_mask_image[input_mask_image>1] = 1
+            LOGGER.info(f"All islands are converted to 1")
+            input_mask_image[input_mask_image>=1] = 1
             mask_header['BUNIT'] = 'Jy/beam'
 
         mask_image=input_mask_image

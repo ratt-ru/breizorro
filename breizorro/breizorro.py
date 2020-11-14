@@ -2,6 +2,7 @@ import sys
 import numpy
 import shutil
 import logging
+import argparse
 import scipy.special
 import scipy.ndimage
 from astropy.io import fits
@@ -32,6 +33,7 @@ def get_image(fitsfile):
     else:
         image = numpy.array(input_hdu.data[0, 0, :, :])
     return image
+
 
 def get_image_header(fitsfile):
     LOGGER.info(f"Reading {fitsfile} header")
@@ -73,6 +75,16 @@ def make_noise_map(restored_image, boxsize):
     LOGGER.info(f"Median noise value is {median_noise}")
     return noise
 
+def merge_masks(maskfiles, dilate=0):
+    """Merge a list of mask file and perfom dilation"""
+    shutil.copyfile(modelfits[0], outfile)
+    init_mask = maskfile[0]
+    finalmaskdata = getImage(init_mask)
+    for maskfile in maskfiles[1:]:
+        finalmaskdata += getImage(maskfile)
+    finalmaskdata = binary_dilation(finalmaskdata, iterations=dilate)
+    return finalmaskdata
+
 
 def main():
     LOGGER.info("Welcome to breizorro")
@@ -84,8 +96,10 @@ def main():
     parser = ArgumentParser(description='breizorro [options] --image restored_image')
     parser.add_argument('--restored-image', dest="imagename", required=False,
                         help="Restored image file")
-    parser.add_argument('--mask-image', dest="maskname", required=False,
+    parser.add_argument('--mask-image', dest="masknames", nargs='+', type=argparse.FileType('r'),
                         help="Input mask file")
+    parser.add_argument('--merge', dest='merge', action='store_true', default=False,
+                        help='Merge a list of masks')
     parser.add_argument('--threshold', dest='threshold', default=6.5,
                         help='Sigma threshold for masking (default = 6.5)')
     parser.add_argument('--boxsize', dest='boxsize', default=50,
@@ -96,7 +110,7 @@ def main():
                         help='Number the islands detected (default=do not number islands)')
     parser.add_argument('--remove-islands', dest='remove_isl', metavar='N', type=int, nargs='+',
                          help='List of islands to remove from input mask. e.g. --remove-islands 1,18,20')
-    parser.add_argument('--savenoise', dest='savenoise', action = 'store_true', default = False,
+    parser.add_argument('--savenoise', dest='savenoise', action='store_true', default=False,
                         help='Enable to export noise image as FITS file (default=do not save noise image)')
     parser.add_argument('--outfile', dest='outfile', default='',
                         help='Suffix for mask image (default=restored_image.replace(".fits",".mask.fits"))')
@@ -128,7 +142,7 @@ def main():
         mask_image[:, 0]=0
         mask_image[0, :]=0
         mask_image[-1, :]=0
-    
+
         if dilate != 0:
             LOGGER.info(f"Dilation mask, {dilate} iteration(s)")
             dilated = binary_dilation(input=mask_image, iterations=dilate)
@@ -142,20 +156,25 @@ def main():
         shutil.copyfile(input_fits, out_mask_fits)
         flush_fits(mask_image, out_mask_fits)
 
-    if args.maskname:
-        input_fits = args.maskname.rstrip('/')
-        input_mask_image = get_image(args.maskname)
-        mask_header = get_image_header(args.maskname)
+    if args.masknames:
+        import IPython; IPython.embed()
+        input_fits = args.masknames[0].rstrip('/')
+        input_mask_image = get_image(args.maskname[0])
+        mask_header = get_image_header(args.maskname[0])
         if args.islands:
             input_mask_image = input_mask_image.byteswap().newbyteorder()
             labeled_mask, num_features = label(input_mask_image)
             input_mask_image = labeled_mask
             mask_header['BUNIT'] = 'source_ID'
             LOGGER.info(f"Number of islands: {num_features}")
+            out_mask_fits = input_fits.replace('.fits', '_isl.fits')
         elif args.remove_isl:
             LOGGER.info(f"Removing islands: {args.remove_isl}")
             for isl in args.remove_isl:
                 input_mask_image = numpy.where(input_mask_image==isl, 0, input_mask_image)
+        elif args.merge:
+            LOGGER.info(f"Merging the following masks: {args.masknames}")
+            input_mask_image = merge_mask(args.masknames, args.dilate)
         else:
             LOGGER.info(f"All islands are converted to 1")
             input_mask_image[input_mask_image>=1] = 1

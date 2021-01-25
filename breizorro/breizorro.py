@@ -6,7 +6,7 @@ import scipy.special
 import scipy.ndimage
 from astropy.io import fits
 from optparse import OptionParser
-from scipy.ndimage.morphology import binary_dilation
+from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
 
 def create_logger():
     """Create a console logger"""
@@ -76,6 +76,7 @@ def main():
     parser.add_option('--threshold', dest = 'threshold', help = 'Sigma threshold for masking (default = 6.5)', default = 6.5)
     parser.add_option('--boxsize', dest = 'boxsize', help = 'Box size over which to compute stats (default = 50)', default = 50)
     parser.add_option('--dilate', dest = 'dilate', help = 'Number of iterations of binary dilation (default = 0)', default = 0)
+    parser.add_option('--fill-holes', dest = 'fill_holes', action='store_true', help = 'Fill holes (i.e. entirely closed regions) in mask')
     parser.add_option('--savenoise', dest = 'savenoise', help = 'Enable to export noise image as FITS file (default = do not save noise image)', action = 'store_true', default = False)
     parser.add_option('--outfile', dest = 'outfile', help = 'Suffix for mask image (default = restored_image.replace(".fits",".mask.fits"))', default = '')
     (options,args) = parser.parse_args()
@@ -110,6 +111,10 @@ def main():
         LOGGER.info(f"Dilation mask, {dilate} iteration(s)")
         dilated = binary_dilation(input = mask_image, iterations = dilate)
         mask_image = dilated
+        
+    if options.fill_holes:
+        LOGGER.info(f"Filling closed regions")
+        binary_fill_holes(mask_image, output=mask_image)
 
     if outfile == '':
         mask_fits = input_fits.replace('.fits', '.mask.fits')

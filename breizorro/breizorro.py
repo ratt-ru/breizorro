@@ -169,7 +169,7 @@ def main():
     # first, load or generate mask
 
     if args.imagename:
-        input_image, input_header = get_image(args.input_file)
+        input_image, input_header = get_image(input_file)
         LOGGER.info(f"Generating mask using threshold {threshold}")
 
         noise_image = make_noise_map(input_image, boxsize)
@@ -245,7 +245,7 @@ def main():
         
     if args.fill_holes:
         LOGGER.info(f"Filling closed regions")
-        binary_fill_holes(mask_image, output=mask_image)
+        mask_image = binary_fill_holes(mask_image)
 
     if args.gui:
         curdoc().theme = 'caliber'

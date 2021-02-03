@@ -3,6 +3,7 @@ import numpy
 import shutil
 import logging
 import argparse
+import os.path
 import numpy as np
 from astropy.io import fits
 from argparse import ArgumentParser
@@ -31,6 +32,9 @@ def create_logger():
 LOGGER = create_logger()
 
 def get_image(fitsfile):
+    """
+    Reads FITS file, returns tuple of image_array, header
+    """
     LOGGER.info(f"Reading {fitsfile} data")
     input_hdu = fits.open(fitsfile)[0]
     if len(input_hdu.data.shape) == 2:
@@ -39,7 +43,7 @@ def get_image(fitsfile):
         image = numpy.array(input_hdu.data[0, :, :])
     else:
         image = numpy.array(input_hdu.data[0, 0, :, :])
-    return image
+    return image, input_hdu.header
 
 
 def get_image_header(fitsfile):
@@ -83,12 +87,10 @@ def make_noise_map(restored_image, boxsize):
     return noise
 
 
-def merge_mask(maskfiles, dilate=0):
+def merge_mask(finalmaskdata, maskfiles, dilate=0):
     """Merge a list of mask file and perfom dilation"""
-    init_mask = maskfiles[0]
-    finalmaskdata = get_image(init_mask)
-    for maskfile in maskfiles[1:]:
-        finalmaskdata += get_image(maskfile)
+    for maskfile in maskfiles:
+        finalmaskdata |= get_image(maskfile)[0]
     if dilate:
         finalmaskdata = binary_dilation(finalmaskdata, iterations=dilate)
     return finalmaskdata
@@ -115,30 +117,39 @@ def main():
 
     LOGGER.info("Usage: breizorro --help")
     parser = ArgumentParser(description='breizorro [options] --image restored_image')
-    parser.add_argument('--restored-image', dest="imagename", required=False,
-                        help="Restored image file")
-    parser.add_argument('--mask-image', dest="masknames", nargs='+',
-                        help="Input mask file")
-    parser.add_argument('--merge', dest='merge', action='store_true', default=False,
-                        help='Merge a list of masks')
-    parser.add_argument('--subtract', dest='subtract', action='store_true', default=False,
-                        help='Subract a mask from another mask')
-    parser.add_argument('--threshold', dest='threshold', default=6.5,
+    parser.add_argument('-r', '--restored-image', dest="imagename", metavar="IMAGE", 
+                        help="Restored image file from which to build mask")
+    parser.add_argument('-m', '--mask-image', dest="maskname", metavar="MASK",
+                        help="Input mask file(s). Either --restored-image or --mask-image must be specfied.")
+    parser.add_argument('-t', '--threshold', dest='threshold', default=6.5,
                         help='Sigma threshold for masking (default = 6.5)')
-    parser.add_argument('--boxsize', dest='boxsize', default=50,
+    parser.add_argument('-b', '--boxsize', dest='boxsize', default=50,
                         help='Box size over which to compute stats (default = 50)')
-    parser.add_argument('--dilate', dest='dilate', default=0,
-                        help='Number of iterations of binary dilation (default=0)')
-    parser.add_argument('--fill-holes', dest='fill_holes', action='store_true', 
-                        help='Fill holes (i.e. entirely closed regions) in mask')
+    parser.add_argument('--savenoise', dest='savenoise', action='store_true', default=False,
+                        help='Enable to export noise image as FITS file (default=do not save noise image)')
+
+    parser.add_argument('--merge', dest='merge', metavar="MASK(s)", nargs='+',
+                        help='Merge in one or more masks')
+    parser.add_argument('--subtract', dest='subtract', metavar="MASK(s)", nargs='+',
+                        help='Subract one or more masks')
+
     parser.add_argument('--number-islands', dest='islands', action='store_true', default=False,
                         help='Number the islands detected (default=do not number islands)')
     parser.add_argument('--remove-islands', dest='remove_isl', metavar='N', type=int, nargs='+',
-                         help='List of islands to remove from input mask. e.g. --remove-islands 1,18,20')
-    parser.add_argument('--savenoise', dest='savenoise', action='store_true', default=False,
-                        help='Enable to export noise image as FITS file (default=do not save noise image)')
-    parser.add_argument('--outfile', dest='outfile', default='',
-                        help='Suffix for mask image (default=restored_image.replace(".fits",".mask.fits"))')
+                         help='List of islands to remove from input mask. e.g. --remove-islands 1 18 20')
+    parser.add_argument('--extract-islands', dest='extract_isl', metavar='N', type=int, nargs='+',
+                         help='List of islands to extract from input mask. e.g. --extract-islands 1 18 20')
+    parser.add_argument('--make-binary', action="store_true",
+                         help='Replace all island numbers with 1')
+    
+    parser.add_argument('--dilate', dest='dilate', metavar="R", type=int, default=0,
+                        help='Apply dilation with a radius of R pixels')
+    parser.add_argument('--fill-holes', dest='fill_holes', action='store_true', 
+                        help='Fill holes (i.e. entirely closed regions) in mask')
+
+    parser.add_argument('-o', '--outfile', dest='outfile', default='',
+                        help='Suffix for mask image (default based on input name')
+
     parser.add_argument('--gui', dest='gui', action='store_true', default=False,
                          help='Open mask in gui.')
     args = parser.parse_args()
@@ -148,18 +159,23 @@ def main():
     savenoise = args.savenoise
     outfile = args.outfile
 
-    if not args.imagename and not args.masknames:
-        LOGGER.info("Please specify a FITS file")
-        sys.exit()
+    if args.imagename and args.maskname:
+        parser.error("Either --restored-image or --mask-image must be specified, but not both")
+
+    # define input file, and get its name and extension
+    input_file = args.imagename or args.maskname
+    name, ext = os.path.split(input_file)
+
+    # first, load or generate mask
 
     if args.imagename:
-        input_fits = args.imagename.rstrip('/')
-        input_image = get_image(input_fits)
+        input_image, input_header = get_image(args.input_file)
+        LOGGER.info(f"Generating mask using threshold {threshold}")
 
         noise_image = make_noise_map(input_image, boxsize)
         if savenoise:
-            noise_fits = input_fits.replace('.fits', '.noise.fits')
-            shutil.copyfile(input_fits, noise_fits)
+            noise_fits = f"{name}.noise.fits"
+            shutil.copyfile(input_file, noise_fits)
             flush_fits(noise_image, noise_fits)
 
         mask_image = input_image > threshold * noise_image
@@ -169,84 +185,103 @@ def main():
         mask_image[0, :]=0
         mask_image[-1, :]=0
 
-        if dilate != 0:
-            LOGGER.info(f"Dilation mask, {dilate} iteration(s)")
-            dilated = binary_dilation(input=mask_image, iterations=dilate)
-            mask_image = dilated
-            
-        if args.fill_holes:
-            LOGGER.info(f"Filling closed regions")
-            binary_fill_holes(mask_image, output=mask_image)
+        mask_header = input_header
+        mask_header['BUNIT'] = 'mask'
 
-        if args.outfile:
-            out_mask_fits = args.outfile
-        else:
-            out_mask_fits = input_fits.replace('.fits', '.mask.fits')
+        out_mask_fits = args.outfile or f"{name}.mask.fits"
 
+    elif args.maskname:
+        mask_image, mask_header = get_image(args.maskname)
+        LOGGER.info(f"Input mask loaded")
+
+        out_mask_fits = args.outfile or f"{name}.out.{ext}"
+    else:
+        parser.error("Either --restored-image or --mask-image must be specified")
+        sys.exit(1)
+
+    # next, merge and/or subtract
+    if args.merge:
+        for merge in args.merge:
+            mask_image += get_image(merge)[0]
+            LOGGER.info("Merged into mask")
+
+    if args.subtract:
+        for subtract in args.subtract:
+            mask_image[get_image(subtract)[0] != 0] = 0
+            LOGGER.info("Subtracted from mask")
+
+    if args.islands:
+        LOGGER.info(f"(Re)numbering islands")
+        mask_image = mask_image != 0
+        # mask_image = mask_image.byteswap().newbyteorder()
+        mask_image, num_features = label(mask_image)
+        mask_header['BUNIT'] = 'Source_ID'
+        LOGGER.info(f"Number of islands: {num_features}")
+    
+    if args.remove_isl:
+        LOGGER.info(f"Removing islands: {args.remove_isl}")
+        for isl in args.remove_isl:
+            mask_image[mask_image == isl] = 0
+
+    if args.extract_isl:
+        LOGGER.info(f"Extracting islands: {args.extract_isl}")
+        new_mask_image = np.zeros_like(mask_image)
+        for isl in args.extract_isl:
+            new_mask_image[mask_image == isl] = isl
+        mask_image = new_mask_image
+
+    if args.make_binary:
+        LOGGER.info(f"Converting mask to binary")
+        mask_image = mask_image!=0
+        mask_header['BUNIT'] = 'mask'
+
+    if args.dilate:
+        LOGGER.info(f"Dilating mask using a ball of R={args.dilate}pix")
+        R = args.dilate
+        r = np.arange(-R, R+1)
+        struct = np.sqrt(r[:, np.newaxis]**2 + r[np.newaxis,:]**2) <= R
+        # print(struct)
+        mask_image = binary_dilation(input=mask_image, structure=struct)
+        
+    if args.fill_holes:
+        LOGGER.info(f"Filling closed regions")
+        binary_fill_holes(mask_image, output=mask_image)
+
+    if args.gui:
+        curdoc().theme = 'caliber'
+
+        LOGGER.info("Loading Gui ...")
+        d = mask_image
+        p = figure(tooltips=[("x", "$x"), ("y", "$y"), ("value", "@image")])
+        p.x_range.range_padding = p.y_range.range_padding = 0
+        p.title.text = input_fits
+
+        # must give a vector of image data for image parameter
+        p.image(image=[d], x=0, y=0, dw=10, dh=10, palette="Greys256", level="image")
+        p.grid.grid_line_width = 0.5
+        src1 = ColumnDataSource({'x': [], 'y': [], 'width': [], 'height': [], 'alpha': []})
+        src2 = ColumnDataSource({'xs': [], 'ys': [], 'alpha': []})
+        renderer1 = p.rect('x', 'y', 'width', 'height', source=src1, alpha='alpha')
+        renderer2 = p.multi_line('xs', 'ys', source=src2, alpha='alpha')
+        draw_tool1 = BoxEditTool(renderers=[renderer1], empty_value=1)
+        draw_tool2 = FreehandDrawTool(renderers=[renderer2])
+        p.add_tools(draw_tool1)
+        p.add_tools(draw_tool2)
+        p.toolbar.active_drag = draw_tool1
+        output_file("briezorro.html", title="Mask Editer")
+        show(p)
+
+        LOGGER.info(f"All islands are converted to 1")
+        input_mask_image[input_mask_image>=1] = 1
+        mask_header['BUNIT'] = 'Jy/beam'
+        out_mask_fits = args.outfile or input_fits.replace('.fits', '.binary.fits')
         shutil.copyfile(input_fits, out_mask_fits)
-        flush_fits(mask_image, out_mask_fits)
+        flush_fits(input_mask_image, out_mask_fits, mask_header)
 
-    if args.masknames:
-        print(args.masknames)
-        input_fits = args.masknames[0].rstrip('/')
-        input_mask_image = get_image(args.masknames[0])
-        mask_header = get_image_header(args.masknames[0])
-        if args.islands:
-            input_mask_image = input_mask_image.byteswap().newbyteorder()
-            labeled_mask, num_features = label(input_mask_image)
-            input_mask_image = labeled_mask
-            mask_header['BUNIT'] = 'source_ID'
-            LOGGER.info(f"Number of islands: {num_features}")
-            out_mask_fits = args.outfile or input_fits.replace('.fits', '.isl.fits')
-            shutil.copyfile(input_fits, out_mask_fits)
-            flush_fits(input_mask_image, out_mask_fits, mask_header)
-        elif args.remove_isl:
-            LOGGER.info(f"Removing islands: {args.remove_isl}")
-            for isl in args.remove_isl:
-                input_mask_image = numpy.where(input_mask_image==isl, 0, input_mask_image)
-            out_mask_fits = args.outfile or input_fits.replace('.fits', '.rmv_isl.fits')
-            shutil.copyfile(input_fits, out_mask_fits)
-            flush_fits(input_mask_image, out_mask_fits, mask_header)
-        elif args.merge:
-            LOGGER.info(f"Merging the following masks: {args.masknames}")
-            input_mask_image = merge_mask(args.masknames, args.dilate)
-            out_mask_fits = args.outfile or input_fits.replace('.fits', '.merge.fits')
-            shutil.copyfile(input_fits, out_mask_fits)
-            flush_fits(input_mask_image, out_mask_fits, mask_header)
-        elif args.subtract:
-            LOGGER.info(f"Subtracting the following masks: {args.masknames}")
-            input_mask_image = subtract_mask(args.masknames, args.dilate)
-            out_mask_fits = args.outfile or input_fits.replace('.fits', '.subtract.fits')
-            shutil.copyfile(input_fits, out_mask_fits)
-            flush_fits(input_mask_image, out_mask_fits, mask_header)
-        elif args.gui:
-            curdoc().theme = 'caliber'
+    
+    # write out result
+    mask_header['BUNIT'] = 'Jy/beam'
 
-            LOGGER.info("Loading Gui ...")
-            d = input_mask_image
-            p = figure(tooltips=[("x", "$x"), ("y", "$y"), ("value", "@image")])
-            p.x_range.range_padding = p.y_range.range_padding = 0
-            p.title.text = input_fits
-
-            # must give a vector of image data for image parameter
-            p.image(image=[d], x=0, y=0, dw=10, dh=10, palette="Greys256", level="image")
-            p.grid.grid_line_width = 0.5
-            src1 = ColumnDataSource({'x': [], 'y': [], 'width': [], 'height': [], 'alpha': []})
-            src2 = ColumnDataSource({'xs': [], 'ys': [], 'alpha': []})
-            renderer1 = p.rect('x', 'y', 'width', 'height', source=src1, alpha='alpha')
-            renderer2 = p.multi_line('xs', 'ys', source=src2, alpha='alpha')
-            draw_tool1 = BoxEditTool(renderers=[renderer1], empty_value=1)
-            draw_tool2 = FreehandDrawTool(renderers=[renderer2])
-            p.add_tools(draw_tool1)
-            p.add_tools(draw_tool2)
-            p.toolbar.active_drag = draw_tool1
-            output_file("briezorro.html", title="Mask Editer")
-            show(p)
-        else:
-            LOGGER.info(f"All islands are converted to 1")
-            input_mask_image[input_mask_image>=1] = 1
-            mask_header['BUNIT'] = 'Jy/beam'
-            out_mask_fits = args.outfile or input_fits.replace('.fits', '.binary.fits')
-            shutil.copyfile(input_fits, out_mask_fits)
-            flush_fits(input_mask_image, out_mask_fits, mask_header)
+    shutil.copyfile(input_file, out_mask_fits)  # to provide a template
+    flush_fits(mask_image, out_mask_fits, mask_header)
     LOGGER.info("Done")

@@ -205,6 +205,7 @@ def main():
             mask_image += get_image(merge)[0]
             LOGGER.info("Merged into mask")
         mask_image = mask_image != 0
+        mask_header['BUNIT'] = 'mask'
 
     if args.subtract:
         for subtract in args.subtract:
@@ -255,7 +256,7 @@ def main():
         d = mask_image
         p = figure(tooltips=[("x", "$x"), ("y", "$y"), ("value", "@image")])
         p.x_range.range_padding = p.y_range.range_padding = 0
-        p.title.text = input_fits
+        p.title.text = out_mask_fits
 
         # must give a vector of image data for image parameter
         p.image(image=[d], x=0, y=0, dw=10, dh=10, palette="Greys256", level="image")
@@ -269,19 +270,12 @@ def main():
         p.add_tools(draw_tool1)
         p.add_tools(draw_tool2)
         p.toolbar.active_drag = draw_tool1
-        output_file("briezorro.html", title="Mask Editer")
+        output_file("breizorro.html", title="Mask Editor")
         show(p)
 
-        LOGGER.info(f"All islands are converted to 1")
-        input_mask_image[input_mask_image>=1] = 1
-        mask_header['BUNIT'] = 'Jy/beam'
-        out_mask_fits = args.outfile or input_fits.replace('.fits', '.binary.fits')
-        shutil.copyfile(input_fits, out_mask_fits)
-        flush_fits(input_mask_image, out_mask_fits, mask_header)
-
-    
-    # write out result
-    mask_header['BUNIT'] = 'Jy/beam'
+        LOGGER.info(f"Enforcing that mask to binary")
+        mask_image = mask_image!=0
+        mask_header['BUNIT'] = 'mask'
 
     shutil.copyfile(input_file, out_mask_fits)  # to provide a template
     flush_fits(mask_image, out_mask_fits, mask_header)

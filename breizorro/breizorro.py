@@ -87,27 +87,6 @@ def make_noise_map(restored_image, boxsize):
     return noise
 
 
-def merge_mask(finalmaskdata, maskfiles, dilate=0):
-    """Merge a list of mask file and perfom dilation"""
-    for maskfile in maskfiles:
-        finalmaskdata |= get_image(maskfile)[0]
-    if dilate:
-        finalmaskdata = binary_dilation(finalmaskdata, iterations=dilate)
-    return finalmaskdata
-
-
-def subtract_mask(maskfiles, dilate=0):
-    """Subtract a list of masks from the index 0 maskfile and perfom dilation"""
-    init_mask = maskfiles[0]
-    finalmaskdata = get_image(init_mask)
-    for maskfile in maskfiles[1:]:
-        finalmaskdata -= get_image(maskfile)
-    finalmaskdata[finalmaskdata<0] = 0
-    if dilate:
-        finalmaskdata = binary_dilation(finalmaskdata, iterations=dilate)
-    return finalmaskdata
-
-
 def main():
     LOGGER.info("Welcome to breizorro")
     # Get version

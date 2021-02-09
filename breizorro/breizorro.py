@@ -204,6 +204,7 @@ def main():
         for merge in args.merge:
             mask_image += get_image(merge)[0]
             LOGGER.info("Merged into mask")
+        mask_image = mask_image != 0
 
     if args.subtract:
         for subtract in args.subtract:

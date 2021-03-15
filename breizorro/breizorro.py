@@ -5,8 +5,10 @@ import logging
 import argparse
 import os.path
 import numpy as np
-from astropy.io import fits
 from argparse import ArgumentParser
+
+import pyregion
+from astropy.io import fits
 
 from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
 from scipy.ndimage.measurements import label
@@ -99,7 +101,7 @@ def main():
     parser.add_argument('-r', '--restored-image', dest="imagename", metavar="IMAGE", 
                         help="Restored image file from which to build mask")
     parser.add_argument('-m', '--mask-image', dest="maskname", metavar="MASK",
-                        help="Input mask file(s). Either --restored-image or --mask-image must be specfied.")
+                        help="Input mask file. Either --restored-image or --mask-image must be specfied.")
     parser.add_argument('-t', '--threshold', dest='threshold', default=6.5,
                         help='Sigma threshold for masking (default = 6.5)')
     parser.add_argument('-b', '--boxsize', dest='boxsize', default=50,
@@ -121,9 +123,14 @@ def main():
     parser.add_argument('--make-binary', action="store_true",
                          help='Replace all island numbers with 1')
     
+    parser.add_argument('--region-file', dest="region", metavar="REGION",
+                        help="Input DS9 region file")
+    parser.add_argument('--mask-region', dest='mask_region', action='store_true',
+                        help='Mask region from DS9 file. (Otherwise provided region will be unmasked)')
+
     parser.add_argument('--dilate', dest='dilate', metavar="R", type=int, default=0,
                         help='Apply dilation with a radius of R pixels')
-    parser.add_argument('--fill-holes', dest='fill_holes', action='store_true', 
+    parser.add_argument('--fill-holes', dest='fill_holes', action='store_true',
                         help='Fill holes (i.e. entirely closed regions) in mask')
 
     parser.add_argument('-o', '--outfile', dest='outfile', default='',
@@ -143,12 +150,11 @@ def main():
 
     # define input file, and get its name and extension
     input_file = args.imagename or args.maskname
-    name, ext = os.path.split(input_file)
+    name, ext = os.path.splitext(input_file)
 
     # first, load or generate mask
-
     if args.imagename:
-        input_image, input_header = get_image(input_file)
+        input_image, mask_header = get_image(input_file)
         LOGGER.info(f"Generating mask using threshold {threshold}")
 
         noise_image = make_noise_map(input_image, boxsize)
@@ -164,15 +170,12 @@ def main():
         mask_image[0, :]=0
         mask_image[-1, :]=0
 
-        mask_header = input_header
         mask_header['BUNIT'] = 'mask'
-
         out_mask_fits = args.outfile or f"{name}.mask.fits"
 
     elif args.maskname:
         mask_image, mask_header = get_image(args.maskname)
         LOGGER.info(f"Input mask loaded")
-
         out_mask_fits = args.outfile or f"{name}.out.{ext}"
     else:
         parser.error("Either --restored-image or --mask-image must be specified")
@@ -221,12 +224,27 @@ def main():
         R = args.dilate
         r = np.arange(-R, R+1)
         struct = np.sqrt(r[:, np.newaxis]**2 + r[np.newaxis,:]**2) <= R
-        # print(struct)
         mask_image = binary_dilation(input=mask_image, structure=struct)
         
     if args.fill_holes:
         LOGGER.info(f"Filling closed regions")
         mask_image = binary_fill_holes(mask_image)
+
+    if args.region:
+        try:
+            LOGGER.info(f"Reading ds9 region file: {args.region}")
+            ds9_regions = pyregion.open(args.region).as_imagecoord(mask_header)
+            shape = (mask_header["NAXIS1"], mask_header["NAXIS2"])
+            region_mask = ds9_regions.get_mask(header=mask_header, shape=shape)
+            if args.mask_region:
+                mask_image[region_mask==True] = False
+                LOGGER.info("Masked DS9 region")
+            else:
+                mask_image[region_mask==True] = True
+                LOGGER.info("Unmasked DS9 region")
+        except:
+            LOGGER.error("Provided a non DS9 region(s) file")
+            LOGGER.error("Try replacing 'J2000' with 'fk5'")
 
     if args.gui:
         curdoc().theme = 'caliber'

@@ -1,4 +1,5 @@
 astropy
 bokeh
 numpy
+pyregion
 scipy

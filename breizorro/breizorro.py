@@ -4,8 +4,11 @@ import shutil
 import logging
 import argparse
 import os.path
+import re
 import numpy as np
 from astropy.io import fits
+from astropy.coordinates import SkyCoord
+from astropy.wcs import WCS
 from argparse import ArgumentParser
 
 from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
@@ -86,6 +89,21 @@ def make_noise_map(restored_image, boxsize):
     LOGGER.info(f"Median noise value is {median_noise}")
     return noise
 
+def resolve_island(isl_spec, mask_image, wcs):
+    if re.match("^\d+$", isl_spec):
+        return int(isl_spec)
+    elif ',' not in isl_spec:
+        raise ValueError(f"invalid island specification: {isl_spec}")
+    c = SkyCoord(*isl_spec.split(',', 1))
+    x, y = wcs.world_to_pixel(c)
+    x = round(float(x))
+    y = round(float(y))
+    value = mask_image[y, x]
+    LOGGER.info(f"coordinates {c} correspond to pixel {x}, {y} with value {value}")
+    if not value:
+        raise ValueError(f"coordinates {c} do not select a valid island")
+    return value
+
 
 def main():
     LOGGER.info("Welcome to breizorro")
@@ -114,12 +132,14 @@ def main():
 
     parser.add_argument('--number-islands', dest='islands', action='store_true', default=False,
                         help='Number the islands detected (default=do not number islands)')
-    parser.add_argument('--remove-islands', dest='remove_isl', metavar='N', type=int, nargs='+',
-                         help='List of islands to remove from input mask. e.g. --remove-islands 1 18 20')
-    parser.add_argument('--extract-islands', dest='extract_isl', metavar='N', type=int, nargs='+',
-                         help='List of islands to extract from input mask. e.g. --extract-islands 1 18 20')
+    parser.add_argument('--remove-islands', dest='remove_isl', metavar='N|COORD', type=str, nargs='+',
+                         help='List of islands to remove from input mask. e.g. --remove-islands 1 18 20 20h10m13s,14d15m20s')
+    parser.add_argument('--extract-islands', dest='extract_isl', metavar='N|COORD', type=str, nargs='+',
+                         help='List of islands to extract from input mask. e.g. --extract-islands 1 18 20 20h10m13s,14d15m20s')
     parser.add_argument('--make-binary', action="store_true",
                          help='Replace all island numbers with 1')
+    parser.add_argument('--invert', action="store_true",
+                         help='Invert the mask')
     
     parser.add_argument('--dilate', dest='dilate', metavar="R", type=int, default=0,
                         help='Apply dilation with a radius of R pixels')
@@ -178,6 +198,10 @@ def main():
         parser.error("Either --restored-image or --mask-image must be specified")
         sys.exit(1)
 
+    wcs = WCS(mask_header)
+    while len(wcs.array_shape) > 2:
+        wcs = wcs.dropaxis(len(wcs.array_shape) - 1)
+
     # next, merge and/or subtract
     if args.merge:
         for merge in args.merge:
@@ -201,13 +225,15 @@ def main():
     
     if args.remove_isl:
         LOGGER.info(f"Removing islands: {args.remove_isl}")
-        for isl in args.remove_isl:
+        for isl_spec in args.remove_isl:
+            isl = resolve_island(isl_spec, mask_image, wcs)
             mask_image[mask_image == isl] = 0
 
     if args.extract_isl:
         LOGGER.info(f"Extracting islands: {args.extract_isl}")
         new_mask_image = np.zeros_like(mask_image)
-        for isl in args.extract_isl:
+        for isl_spec in args.extract_isl:
+            isl = resolve_island(isl_spec, mask_image, wcs)
             new_mask_image[mask_image == isl] = isl
         mask_image = new_mask_image
 
@@ -215,6 +241,10 @@ def main():
         LOGGER.info(f"Converting mask to binary")
         mask_image = mask_image!=0
         mask_header['BUNIT'] = 'mask'
+
+    if args.invert:
+        LOGGER.info(f"Inverting mask")
+        mask_image = mask_image==0
 
     if args.dilate:
         LOGGER.info(f"Dilating mask using a ball of R={args.dilate}pix")

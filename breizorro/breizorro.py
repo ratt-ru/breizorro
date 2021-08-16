@@ -9,6 +9,7 @@ import numpy as np
 from astropy.io import fits
 from astropy.coordinates import SkyCoord
 from astropy.wcs import WCS
+import regions
 from argparse import ArgumentParser
 
 from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
@@ -104,6 +105,18 @@ def resolve_island(isl_spec, mask_image, wcs):
         raise ValueError(f"coordinates {c} do not select a valid island")
     return value
 
+def add_regions(mask_image, regs, wcs):
+    for reg in regs:
+        if hasattr(reg, 'to_pixel'):
+            reg = reg.to_pixel(wcs)
+        mask_image += reg.to_mask().to_image(mask_image.shape)
+
+def remove_regions(mask_image, regs, wcs):
+    for reg in regs:
+        if hasattr(reg, 'to_pixel'):
+            reg = reg.to_pixel(wcs)
+        mask_image[reg.to_mask().to_image(mask_image.shape) != 0] = 0
+
 
 def main():
     LOGGER.info("Welcome to breizorro")
@@ -125,10 +138,10 @@ def main():
     parser.add_argument('--savenoise', dest='savenoise', action='store_true', default=False,
                         help='Enable to export noise image as FITS file (default=do not save noise image)')
 
-    parser.add_argument('--merge', dest='merge', metavar="MASK(s)", nargs='+',
-                        help='Merge in one or more masks')
-    parser.add_argument('--subtract', dest='subtract', metavar="MASK(s)", nargs='+',
-                        help='Subract one or more masks')
+    parser.add_argument('--merge', dest='merge', metavar="MASK(s)|REG(s)", nargs='+',
+                        help='Merge in one or more masks or region files')
+    parser.add_argument('--subtract', dest='subtract', metavar="MASK(s)|REG(s)", nargs='+',
+                        help='Subract one or more masks or region files')
 
     parser.add_argument('--number-islands', dest='islands', action='store_true', default=False,
                         help='Number the islands detected (default=do not number islands)')
@@ -203,17 +216,43 @@ def main():
         wcs = wcs.dropaxis(len(wcs.array_shape) - 1)
 
     # next, merge and/or subtract
+    def load_fits_or_region(filename):
+        fits = regs = None
+        # read as FITS or region
+        try:
+            fits = get_image(filename)
+        except OSError:
+            try:
+                regs = regions.Regions.read(filename)
+            except:
+                LOGGER.error(f"{merge} is neither a FITS file not a regions file")
+                raise
+        return fits, regs
+
+
     if args.merge:
         for merge in args.merge:
-            mask_image += get_image(merge)[0]
-            LOGGER.info("Merged into mask")
+            fits, regs = load_fits_or_region(merge)
+            if fits:
+                LOGGER.info(f"Treating {merge} as a FITS mask")
+                mask_image += fits[0]
+                LOGGER.info("Merged into mask")
+            else:
+                LOGGER.info(f"Merging in {len(regs)} regions from {merge}")
+                add_regions(mask_image, regs, wcs)
         mask_image = mask_image != 0
         mask_header['BUNIT'] = 'mask'
 
     if args.subtract:
         for subtract in args.subtract:
-            mask_image[get_image(subtract)[0] != 0] = 0
-            LOGGER.info("Subtracted from mask")
+            fits, regs = load_fits_or_region(subtract)
+            if fits:
+                LOGGER.info(f"treating {subtract} as a FITS mask")
+                mask_image[fits[0] != 0] = 0
+                LOGGER.info("Subtracted from mask")
+            else:
+                LOGGER.info(f"Subtracting {len(regs)} regions from {subtract}")
+                remove_regions(mask_image, regs, wcs)
 
     if args.islands:
         LOGGER.info(f"(Re)numbering islands")

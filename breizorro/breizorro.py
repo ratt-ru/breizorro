@@ -27,7 +27,7 @@ def create_logger():
     log = logging.getLogger(__name__)
     cfmt = logging.Formatter(('%(name)s - %(asctime)s %(levelname)s - %(message)s'))
     log.setLevel(logging.DEBUG)
-    console = logging.StreamHandler()
+    console = logging.StreamHandler(sys.stdout)
     console.setLevel(logging.INFO)
     console.setFormatter(cfmt)
     log.addHandler(console)

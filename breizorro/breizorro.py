@@ -176,7 +176,9 @@ def main():
 
     # define input file, and get its name and extension
     input_file = args.imagename or args.maskname
-    name, ext = os.path.split(input_file)
+#    name, ext = os.path.split(input_file)
+    name = '.'.join(input_file.split('.')[:-1])
+    ext = input_file.split('.')[-1]
 
     # first, load or generate mask
 

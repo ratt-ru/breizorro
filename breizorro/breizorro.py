@@ -126,7 +126,7 @@ def main():
     LOGGER.info(f"Version: {_version}")
 
     LOGGER.info("Usage: breizorro --help")
-    parser = ArgumentParser(description='breizorro [options] --image restored_image')
+    parser = ArgumentParser(description='breizorro [options] --restored-image restored_image')
     parser.add_argument('-r', '--restored-image', dest="imagename", metavar="IMAGE", 
                         help="Restored image file from which to build mask")
     parser.add_argument('-m', '--mask-image', dest="maskname", metavar="MASK",

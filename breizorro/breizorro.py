@@ -318,6 +318,7 @@ def main():
         for ext_isl in extended_islands:
             isl_slice = mask_image[ext_isl] == 0
             new_mask_image[ext_isl] = isl_slice
+        mask_header['BUNIT'] = 'Jy/beam'
         mask_image = input_image * new_mask_image
         LOGGER.info(f"Number of extended islands found: {len(extended_islands)}")
 

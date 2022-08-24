@@ -303,6 +303,8 @@ def main():
         mask_image = binary_fill_holes(mask_image)
 
     if args.sum_peak:
+        # This mainly to produce an image that mask out super extended sources (via sum-to-peak flux ratio)
+        # This is useful to allow source finder to detect mainly point-like sources for cross-matching purposes only.
         LOGGER.info(f"Including only flux islands with a sum-peak ratio below: {args.sum_peak}")
         extended_islands = []
         mask_image_label, num_features = label(mask_image)

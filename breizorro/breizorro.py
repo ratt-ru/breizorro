@@ -13,7 +13,7 @@ import regions
 from argparse import ArgumentParser
 
 from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
-from scipy.ndimage.measurements import label
+from scipy.ndimage.measurements import label, find_objects
 import scipy.special
 import scipy.ndimage
 
@@ -159,6 +159,10 @@ def main():
     parser.add_argument('--fill-holes', dest='fill_holes', action='store_true', 
                         help='Fill holes (i.e. entirely closed regions) in mask')
 
+    parser.add_argument('--sum-peak', dest='sum_peak', default=None,
+                        help='Sum to peak ratio of flux islands to mask in original image.'
+                             'e.g. --sum-peak 100 will mask everything with a ratio above 100')
+
     parser.add_argument('-o', '--outfile', dest='outfile', default='',
                         help='Suffix for mask image (default based on input name')
 
@@ -292,12 +296,33 @@ def main():
         R = args.dilate
         r = np.arange(-R, R+1)
         struct = np.sqrt(r[:, np.newaxis]**2 + r[np.newaxis,:]**2) <= R
-        # print(struct)
         mask_image = binary_dilation(input=mask_image, structure=struct)
         
     if args.fill_holes:
         LOGGER.info(f"Filling closed regions")
         mask_image = binary_fill_holes(mask_image)
+
+    if args.sum_peak:
+        # This mainly to produce an image that mask out super extended sources (via sum-to-peak flux ratio)
+        # This is useful to allow source finder to detect mainly point-like sources for cross-matching purposes only.
+        LOGGER.info(f"Including only flux islands with a sum-peak ratio below: {args.sum_peak}")
+        extended_islands = []
+        mask_image_label, num_features = label(mask_image)
+        island_objects = find_objects(mask_image_label.astype(int))
+        for island in island_objects:
+            isl_sum = (input_image[island] * mask_image[island]).sum()
+            isl_peak = (input_image[island] * mask_image[island]).max()
+            isl_sum_peak = isl_sum / isl_peak
+            if isl_sum_peak > float(args.sum_peak):
+                extended_islands.append(island)
+        new_mask_image = np.zeros_like(mask_image)
+        new_mask_image = new_mask_image == 0
+        for ext_isl in extended_islands:
+            isl_slice = mask_image[ext_isl] == 0
+            new_mask_image[ext_isl] = isl_slice
+        mask_header['BUNIT'] = 'Jy/beam'
+        mask_image = input_image * new_mask_image
+        LOGGER.info(f"Number of extended islands found: {len(extended_islands)}")
 
     if args.gui:
         curdoc().theme = 'caliber'

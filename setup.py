@@ -2,7 +2,7 @@ import os
 from setuptools import setup, find_packages
 
 pkg = 'breizorro'
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 build_root = os.path.dirname(__file__)
 
 def readme():

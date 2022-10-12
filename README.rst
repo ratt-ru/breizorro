@@ -25,7 +25,9 @@ To show help message and exit
 
 .. code-block:: bash
    
-   $ breizorro.breizorro - 2022-08-24 11:07:39,311 INFO - Welcome to breizorro
+   $ breizorro --help
+
+     breizorro.breizorro - 2022-08-24 11:07:39,311 INFO - Welcome to breizorro
      breizorro.breizorro - 2022-08-24 11:07:39,375 INFO - Version: 0.1.1
      breizorro.breizorro - 2022-08-24 11:07:39,375 INFO - Usage: breizorro --help
      usage: breizorro [-h] [-r IMAGE] [-m MASK] [-t THRESHOLD] [-b BOXSIZE]

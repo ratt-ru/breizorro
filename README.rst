@@ -1,6 +1,9 @@
 =========
 breizorro
 =========
+|Pypi Version|
+|Python Versions|
+|Project License|
 
 A tool for creating a binary mask given a FITS image
 
@@ -93,6 +96,14 @@ standards pep8_.
 .. |Project License| image:: https://img.shields.io/badge/license-GPL-blue.svg
                      :target: https://github.com/ratt-ru/breizorro/blob/main/LICENSE
                      :alt:
+
+.. |Python Versions| image:: https://img.shields.io/pypi/pyversions/breizorro.svg
+                     :target: https://pypi.python.org/pypi/breizorro/
+                     :alt:
+
+.. |Pypi Version| image:: https://img.shields.io/pypi/v/breizorro.svg
+                  :target: https://pypi.python.org/pypi/breizorro
+                  :alt:
 
 .. _source: https://github.com/ratt-ru/breizorro
 .. _license: https://github.com/ratt-ru/breizorro/blob/main/LICENSE

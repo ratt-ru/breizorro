@@ -2,7 +2,7 @@ import os
 from setuptools import setup, find_packages
 
 pkg = 'breizorro'
-__version__ = "0.0.1"
+__version__ = "0.1.1"
 build_root = os.path.dirname(__file__)
 
 def readme():
@@ -19,6 +19,7 @@ setup(name=pkg,
       version=__version__,
       description="Creates a binary mask given a FITS image",
       long_description=readme(),
+      long_description_content_type="text/x-rst",
       author="Ian Heywood & RATT",
       author_email="ian.heywood@physics.ox.ac.uk",
       packages=find_packages(),

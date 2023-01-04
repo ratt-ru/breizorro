@@ -2,3 +2,5 @@ astropy
 bokeh
 numpy
 scipy
+regions
+

@@ -9,10 +9,11 @@ import numpy as np
 from astropy.io import fits
 from astropy.coordinates import SkyCoord
 from astropy.wcs import WCS
+import regions
 from argparse import ArgumentParser
 
 from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
-from scipy.ndimage.measurements import label
+from scipy.ndimage.measurements import label, find_objects
 import scipy.special
 import scipy.ndimage
 
@@ -26,7 +27,7 @@ def create_logger():
     log = logging.getLogger(__name__)
     cfmt = logging.Formatter(('%(name)s - %(asctime)s %(levelname)s - %(message)s'))
     log.setLevel(logging.DEBUG)
-    console = logging.StreamHandler()
+    console = logging.StreamHandler(sys.stdout)
     console.setLevel(logging.INFO)
     console.setFormatter(cfmt)
     log.addHandler(console)
@@ -107,6 +108,18 @@ def resolve_island(isl_spec, mask_image, wcs, ignore_missing=False):
             raise ValueError(f"coordinates {c} do not select a valid island")
     return value
 
+def add_regions(mask_image, regs, wcs):
+    for reg in regs:
+        if hasattr(reg, 'to_pixel'):
+            reg = reg.to_pixel(wcs)
+        mask_image += reg.to_mask().to_image(mask_image.shape)
+
+def remove_regions(mask_image, regs, wcs):
+    for reg in regs:
+        if hasattr(reg, 'to_pixel'):
+            reg = reg.to_pixel(wcs)
+        mask_image[reg.to_mask().to_image(mask_image.shape) != 0] = 0
+
 
 def main():
     LOGGER.info("Welcome to breizorro")
@@ -116,7 +129,7 @@ def main():
     LOGGER.info(f"Version: {_version}")
 
     LOGGER.info("Usage: breizorro --help")
-    parser = ArgumentParser(description='breizorro [options] --image restored_image')
+    parser = ArgumentParser(description='breizorro [options] --restored-image restored_image')
     parser.add_argument('-r', '--restored-image', dest="imagename", metavar="IMAGE", 
                         help="Restored image file from which to build mask")
     parser.add_argument('-m', '--mask-image', dest="maskname", metavar="MASK",
@@ -128,10 +141,10 @@ def main():
     parser.add_argument('--savenoise', dest='savenoise', action='store_true', default=False,
                         help='Enable to export noise image as FITS file (default=do not save noise image)')
 
-    parser.add_argument('--merge', dest='merge', metavar="MASK(s)", nargs='+',
-                        help='Merge in one or more masks')
-    parser.add_argument('--subtract', dest='subtract', metavar="MASK(s)", nargs='+',
-                        help='Subract one or more masks')
+    parser.add_argument('--merge', dest='merge', metavar="MASK(s)|REG(s)", nargs='+',
+                        help='Merge in one or more masks or region files')
+    parser.add_argument('--subtract', dest='subtract', metavar="MASK(s)|REG(s)", nargs='+',
+                        help='Subract one or more masks or region files')
 
     parser.add_argument('--number-islands', dest='islands', action='store_true', default=False,
                         help='Number the islands detected (default=do not number islands)')
@@ -151,6 +164,10 @@ def main():
     parser.add_argument('--fill-holes', dest='fill_holes', action='store_true', 
                         help='Fill holes (i.e. entirely closed regions) in mask')
 
+    parser.add_argument('--sum-peak', dest='sum_peak', default=None,
+                        help='Sum to peak ratio of flux islands to mask in original image.'
+                             'e.g. --sum-peak 100 will mask everything with a ratio above 100')
+
     parser.add_argument('-o', '--outfile', dest='outfile', default='',
                         help='Suffix for mask image (default based on input name')
 
@@ -168,7 +185,9 @@ def main():
 
     # define input file, and get its name and extension
     input_file = args.imagename or args.maskname
-    name, ext = os.path.split(input_file)
+#    name, ext = os.path.split(input_file)
+    name = '.'.join(input_file.split('.')[:-1])
+    ext = input_file.split('.')[-1]
 
     # first, load or generate mask
 
@@ -208,17 +227,43 @@ def main():
         wcs = wcs.dropaxis(len(wcs.array_shape) - 1)
 
     # next, merge and/or subtract
+    def load_fits_or_region(filename):
+        fits = regs = None
+        # read as FITS or region
+        try:
+            fits = get_image(filename)
+        except OSError:
+            try:
+                regs = regions.Regions.read(filename)
+            except:
+                LOGGER.error(f"{merge} is neither a FITS file not a regions file")
+                raise
+        return fits, regs
+
+
     if args.merge:
         for merge in args.merge:
-            mask_image += get_image(merge)[0]
-            LOGGER.info("Merged into mask")
+            fits, regs = load_fits_or_region(merge)
+            if fits:
+                LOGGER.info(f"Treating {merge} as a FITS mask")
+                mask_image += fits[0]
+                LOGGER.info("Merged into mask")
+            else:
+                LOGGER.info(f"Merging in {len(regs)} regions from {merge}")
+                add_regions(mask_image, regs, wcs)
         mask_image = mask_image != 0
         mask_header['BUNIT'] = 'mask'
 
     if args.subtract:
         for subtract in args.subtract:
-            mask_image[get_image(subtract)[0] != 0] = 0
-            LOGGER.info("Subtracted from mask")
+            fits, regs = load_fits_or_region(subtract)
+            if fits:
+                LOGGER.info(f"treating {subtract} as a FITS mask")
+                mask_image[fits[0] != 0] = 0
+                LOGGER.info("Subtracted from mask")
+            else:
+                LOGGER.info(f"Subtracting {len(regs)} regions from {subtract}")
+                remove_regions(mask_image, regs, wcs)
 
     if args.islands:
         LOGGER.info(f"(Re)numbering islands")
@@ -257,12 +302,33 @@ def main():
         R = args.dilate
         r = np.arange(-R, R+1)
         struct = np.sqrt(r[:, np.newaxis]**2 + r[np.newaxis,:]**2) <= R
-        # print(struct)
         mask_image = binary_dilation(input=mask_image, structure=struct)
         
     if args.fill_holes:
         LOGGER.info(f"Filling closed regions")
         mask_image = binary_fill_holes(mask_image)
+
+    if args.sum_peak:
+        # This mainly to produce an image that mask out super extended sources (via sum-to-peak flux ratio)
+        # This is useful to allow source finder to detect mainly point-like sources for cross-matching purposes only.
+        LOGGER.info(f"Including only flux islands with a sum-peak ratio below: {args.sum_peak}")
+        extended_islands = []
+        mask_image_label, num_features = label(mask_image)
+        island_objects = find_objects(mask_image_label.astype(int))
+        for island in island_objects:
+            isl_sum = (input_image[island] * mask_image[island]).sum()
+            isl_peak = (input_image[island] * mask_image[island]).max()
+            isl_sum_peak = isl_sum / isl_peak
+            if isl_sum_peak > float(args.sum_peak):
+                extended_islands.append(island)
+        new_mask_image = np.zeros_like(mask_image)
+        new_mask_image = new_mask_image == 0
+        for ext_isl in extended_islands:
+            isl_slice = mask_image[ext_isl] == 0
+            new_mask_image[ext_isl] = isl_slice
+        mask_header['BUNIT'] = 'Jy/beam'
+        mask_image = input_image * new_mask_image
+        LOGGER.info(f"Number of extended islands found: {len(extended_islands)}")
 
     if args.gui:
         curdoc().theme = 'caliber'

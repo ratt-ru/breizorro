@@ -149,6 +149,8 @@ def main():
                          help='List of islands to remove from input mask. e.g. --remove-islands 1 18 20 20h10m13s,14d15m20s')
     parser.add_argument('--extract-islands', dest='extract_isl', metavar='N|COORD', type=str, nargs='+',
                          help='List of islands to extract from input mask. e.g. --extract-islands 1 18 20 20h10m13s,14d15m20s')
+    parser.add_argument('--minimum-size', dest='minsize', default=False,
+                        help='Remove islands that have areas fewer than or equal to the specified number of pixels')
     parser.add_argument('--make-binary', action="store_true",
                          help='Replace all island numbers with 1')
     parser.add_argument('--invert', action="store_true",
@@ -281,6 +283,14 @@ def main():
             isl = resolve_island(isl_spec, mask_image, wcs)
             new_mask_image[mask_image == isl] = isl
         mask_image = new_mask_image
+
+    if args.minsize:
+        LOGGER.info(f"Removing islands that occupy fewer than or equal to {args.minsize} pixels")
+        mask_image = mask_image != 0
+        island_labels, num_features = label(mask_image)
+        island_areas = numpy.array(scipy.ndimage.sum(mask_image,island_labels, numpy.arange(island_labels.max()+1)))
+        min_mask = island_areas >= int(args.minsize)
+        mask_image = min_mask[island_labels.ravel()].reshape(island_labels.shape)
 
     if args.make_binary:
         LOGGER.info(f"Converting mask to binary")

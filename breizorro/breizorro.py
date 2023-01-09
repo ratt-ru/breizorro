@@ -90,7 +90,7 @@ def make_noise_map(restored_image, boxsize):
     LOGGER.info(f"Median noise value is {median_noise}")
     return noise
 
-def resolve_island(isl_spec, mask_image, wcs):
+def resolve_island(isl_spec, mask_image, wcs, ignore_missing=False):
     if re.match("^\d+$", isl_spec):
         return int(isl_spec)
     elif ',' not in isl_spec:
@@ -102,7 +102,10 @@ def resolve_island(isl_spec, mask_image, wcs):
     value = mask_image[y, x]
     LOGGER.info(f"coordinates {c} correspond to pixel {x}, {y} with value {value}")
     if not value:
-        raise ValueError(f"coordinates {c} do not select a valid island")
+        if ignore_missing:
+            LOGGER.warning("no island at specified coordinates, ignoring")
+        else:
+            raise ValueError(f"coordinates {c} do not select a valid island")
     return value
 
 def add_regions(mask_image, regs, wcs):
@@ -147,6 +150,8 @@ def main():
                         help='Number the islands detected (default=do not number islands)')
     parser.add_argument('--remove-islands', dest='remove_isl', metavar='N|COORD', type=str, nargs='+',
                          help='List of islands to remove from input mask. e.g. --remove-islands 1 18 20 20h10m13s,14d15m20s')
+    parser.add_argument('--ignore-missing-islands', action='store_true', 
+                         help='If an island specified by coordinates does not exist, do not throw an error')
     parser.add_argument('--extract-islands', dest='extract_isl', metavar='N|COORD', type=str, nargs='+',
                          help='List of islands to extract from input mask. e.g. --extract-islands 1 18 20 20h10m13s,14d15m20s')
     parser.add_argument('--make-binary', action="store_true",
@@ -271,8 +276,9 @@ def main():
     if args.remove_isl:
         LOGGER.info(f"Removing islands: {args.remove_isl}")
         for isl_spec in args.remove_isl:
-            isl = resolve_island(isl_spec, mask_image, wcs)
-            mask_image[mask_image == isl] = 0
+            isl = resolve_island(isl_spec, mask_image, wcs, ignore_missing=args.ignore_missing_islands)
+            if isl != None:
+                mask_image[mask_image == isl] = 0
 
     if args.extract_isl:
         LOGGER.info(f"Extracting islands: {args.extract_isl}")

@@ -12,7 +12,7 @@ from astropy.wcs import WCS
 import regions
 from argparse import ArgumentParser
 
-from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
+from scipy.ndimage.morphology import binary_dilation, binary_erosion, binary_fill_holes
 from scipy.ndimage.measurements import label, find_objects
 import scipy.special
 import scipy.ndimage
@@ -163,6 +163,8 @@ def main():
     
     parser.add_argument('--dilate', dest='dilate', metavar="R", type=int, default=0,
                         help='Apply dilation with a radius of R pixels')
+    parser.add_argument('--erode', dest='erode', metavar="N", type=int, default=0,
+                        help='Apply N iterations of erosion')
     parser.add_argument('--fill-holes', dest='fill_holes', action='store_true', 
                         help='Fill holes (i.e. entirely closed regions) in mask')
 
@@ -313,6 +315,11 @@ def main():
         r = np.arange(-R, R+1)
         struct = np.sqrt(r[:, np.newaxis]**2 + r[np.newaxis,:]**2) <= R
         mask_image = binary_dilation(input=mask_image, structure=struct)
+
+    if args.erode:
+        LOGGER.info(f"Applying {args.erode} iteration(s) of erosion")
+        N = args.erode
+        mask_image = binary_erosion(input=mask_image, iterations=N)
         
     if args.fill_holes:
         LOGGER.info(f"Filling closed regions")

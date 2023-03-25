@@ -203,7 +203,7 @@ def main():
             shutil.copyfile(input_file, noise_fits)
             flush_fits(noise_image, noise_fits)
 
-        mask_image = input_image > threshold * noise_image
+        mask_image = (input_image > threshold * noise_image).astype('float64')
 
         mask_image[:, -1]=0
         mask_image[:, 0]=0

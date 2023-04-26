@@ -350,7 +350,7 @@ def main():
             from bokeh.io import curdoc
             curdoc().theme = 'caliber'
         except ModuleNotFoundError:
-            Logger.error("Running breizorro gui requires optional dependencies, please re-install with: pip install breizorro[gui]")
+            LOGGER.error("Running breizorro gui requires optional dependencies, please re-install with: pip install breizorro[gui]")
 
         LOGGER.info("Loading Gui ...")
         d = mask_image

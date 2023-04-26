@@ -47,7 +47,7 @@ jobs:
         fetch-depth: 1
 
     - name: Install breizorro
-      run: poetry install --extras "testing"
+      run: poetry install
 
     - name: Install breizorro with gui
       run: poetry install --extras "gui"

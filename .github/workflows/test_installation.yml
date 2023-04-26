@@ -51,6 +51,9 @@ jobs:
 
     - name: Install breizorro with gui
       run: poetry install --extras "gui"
+      
+    - name: Install breizorro with tests
+      run: poetry install --extras "testing"
 
     - name: Lint with flake8
       run: |

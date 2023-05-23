@@ -25,9 +25,10 @@ breizorro = "breizorro.main:driver"
 
 [tool.poetry.dependencies]
 astropy = "*"
+numpy = "*"
 regions = "*"
 scipy = "*"
-numpy = "*"
+scikit-image = "*"
 
 # Optional dependencies start here
 bokeh = { version = "*", optional = true}

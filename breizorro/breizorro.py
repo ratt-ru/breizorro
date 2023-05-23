@@ -3,13 +3,13 @@ import numpy
 import shutil
 import logging
 import argparse
+import regions
 import os.path
 import re
 import numpy as np
 from astropy.io import fits
 from astropy.coordinates import SkyCoord
 from astropy.wcs import WCS
-import regions
 from argparse import ArgumentParser
 
 from scipy.ndimage.morphology import binary_dilation, binary_erosion, binary_fill_holes
@@ -17,6 +17,8 @@ from scipy.ndimage.measurements import label, find_objects
 import scipy.special
 import scipy.ndimage
 
+from regions import PolygonSkyRegion
+from skimage.measure import find_contours
 
 def create_logger():
     """Create a console logger"""
@@ -156,7 +158,7 @@ def main():
                          help='Replace all island numbers with 1')
     parser.add_argument('--invert', action="store_true",
                          help='Invert the mask')
-    
+
     parser.add_argument('--dilate', dest='dilate', metavar="R", type=int, default=0,
                         help='Apply dilation with a radius of R pixels')
     parser.add_argument('--erode', dest='erode', metavar="N", type=int, default=0,
@@ -170,6 +172,8 @@ def main():
 
     parser.add_argument('-o', '--outfile', dest='outfile', default='',
                         help='Suffix for mask image (default based on input name')
+    parser.add_argument('--save-regions', dest='outregion', default='',
+                         help='Generate polygon regions from the mask')
 
     parser.add_argument('--gui', dest='gui', action='store_true', default=False,
                          help='Open mask in gui.')
@@ -342,6 +346,26 @@ def main():
         mask_header['BUNIT'] = 'Jy/beam'
         mask_image = input_image * new_mask_image
         LOGGER.info(f"Number of extended islands found: {len(extended_islands)}")
+
+    if args.outregion:
+        contours = find_contours(mask_image, 0.5)
+        polygon_regions = []
+        for contour in contours:
+            # Convert the contour points to pixel coordinates
+            contour_pixels = contour # np.fliplr(contour)  # Reverse the order of coordinates (y, x)
+
+            # Convert the pixel coordinates to Sky coordinates
+            contour_sky = wcs.pixel_to_world(contour_pixels[:, 1], contour_pixels[:, 0])
+
+            # Create a Polygon region from the Sky coordinates
+            polygon_region = PolygonSkyRegion(vertices=contour_sky, meta={'label': 'Region'})
+
+            # Add the polygon region to the list
+            polygon_regions.append(polygon_region)
+        regions.Regions(polygon_regions).write(args.outregion, format='ds9')
+        LOGGER.info(f"Number of regions found: {len(polygon_regions)}")
+        LOGGER.info(f"Saving regions in {args.outregion}")
+
 
     if args.gui:
         try:

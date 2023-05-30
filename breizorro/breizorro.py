@@ -352,14 +352,11 @@ def main():
         polygon_regions = []
         for contour in contours:
             # Convert the contour points to pixel coordinates
-            contour_pixels = contour # np.fliplr(contour)  # Reverse the order of coordinates (y, x)
-
+            contour_pixels = contour
             # Convert the pixel coordinates to Sky coordinates
             contour_sky = wcs.pixel_to_world(contour_pixels[:, 1], contour_pixels[:, 0])
-
             # Create a Polygon region from the Sky coordinates
             polygon_region = PolygonSkyRegion(vertices=contour_sky, meta={'label': 'Region'})
-
             # Add the polygon region to the list
             polygon_regions.append(polygon_region)
         regions.Regions(polygon_regions).write(args.outregion, format='ds9')

@@ -39,7 +39,7 @@ To show help message and exit
                       [--number-islands] [--remove-islands N|COORD [N|COORD ...]]
                       [--ignore-missing-islands]
                       [--extract-islands N|COORD [N|COORD ...]]
-                      [--minimum-size MINSIZE] [--make-binary] [--invert]
+                      [--minimum-size MINSIZE] [--make-binary] [--invert] [--save-regions]
                       [--dilate R] [--erode N] [--fill-holes] [--sum-peak SUM_PEAK]
                       [-o OUTFILE] [--gui]
 

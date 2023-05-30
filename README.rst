@@ -39,9 +39,9 @@ To show help message and exit
                       [--number-islands] [--remove-islands N|COORD [N|COORD ...]]
                       [--ignore-missing-islands]
                       [--extract-islands N|COORD [N|COORD ...]]
-                      [--minimum-size MINSIZE] [--make-binary] [--invert] [--save-regions]
+                      [--minimum-size MINSIZE] [--make-binary] [--invert]
                       [--dilate R] [--erode N] [--fill-holes] [--sum-peak SUM_PEAK]
-                      [-o OUTFILE] [--gui]
+                      [-o OUTFILE] [--save-regions OUTREGION] [--gui]
 
      breizorro [options] --restored-image restored_image
 
@@ -76,7 +76,6 @@ To show help message and exit
           --minimum-size MINSIZE
                                 Remove islands that have areas fewer than or equal to
                                 the specified number of pixels
-          --save-regions        Generate polygon regions from the mask
           --make-binary         Replace all island numbers with 1
           --invert              Invert the mask
           --dilate R            Apply dilation with a radius of R pixels
@@ -87,7 +86,9 @@ To show help message and exit
                                 ratio above 100
           -o OUTFILE, --outfile OUTFILE
                                 Suffix for mask image (default based on input name
-          --gui                 Open mask in gui.
+          --save-regions OUTREGION
+                                Generate polygon regions from the mask
+          --gui                 Open mask in gui
 
 =======
 License

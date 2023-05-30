@@ -76,6 +76,7 @@ To show help message and exit
           --minimum-size MINSIZE
                                 Remove islands that have areas fewer than or equal to
                                 the specified number of pixels
+          --save-regions        Generate polygon regions from the mask
           --make-binary         Replace all island numbers with 1
           --invert              Invert the mask
           --dilate R            Apply dilation with a radius of R pixels

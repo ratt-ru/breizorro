@@ -104,11 +104,13 @@ def resolve_island(isl_spec, mask_image, wcs, ignore_missing=False):
             raise ValueError(f"coordinates {c} do not select a valid island")
     return value
 
-def add_regions(mask_image, regs, wcs):
+def add_regions(mask_image, regs, wcs, logicaland=False):
     for reg in regs:
         if hasattr(reg, 'to_pixel'):
             reg = reg.to_pixel(wcs)
-        mask_image += reg.to_mask().to_image(mask_image.shape)
+        mask_image = np.logical_and(mask_image, reg.to_mask().to_image(mask_image.shape)) \
+                if logicaland else np.logical_or(mask_image, reg.to_mask().to_image(mask_image.shape))
+
 
 def remove_regions(mask_image, regs, wcs):
     for reg in regs:
@@ -141,6 +143,8 @@ def main():
                         help='Merge in one or more masks or region files')
     parser.add_argument('--subtract', dest='subtract', metavar="MASK(s)|REG(s)", nargs='+',
                         help='Subract one or more masks or region files')
+    parser.add_argument('--merge_and', dest='mergeand', action='store_true',
+                        help='Uses logical AND when merging instead of logical OR - the effect creates ever more restrictive masks')
 
     parser.add_argument('--number-islands', dest='islands', action='store_true', default=False,
                         help='Number the islands detected (default=do not number islands)')
@@ -246,11 +250,13 @@ def main():
             fits, regs = load_fits_or_region(merge)
             if fits:
                 LOGGER.info(f"Treating {merge} as a FITS mask")
-                mask_image += fits[0]
+                mask_image = np.logical_and(mask_image, fits[0] > 1e-30) \
+                        if args.mergeand else np.logical_or(mask_image, fits[0] > 1e-30)
+ 
                 LOGGER.info("Merged into mask")
             else:
                 LOGGER.info(f"Merging in {len(regs)} regions from {merge}")
-                add_regions(mask_image, regs, wcs)
+                add_regions(mask_image, regs, wcs, args.mergeand)
         mask_image = mask_image != 0
         mask_header['BUNIT'] = 'mask'
 

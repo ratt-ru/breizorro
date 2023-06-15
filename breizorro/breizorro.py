@@ -17,10 +17,6 @@ from scipy.ndimage.measurements import label, find_objects
 import scipy.special
 import scipy.ndimage
 
-from bokeh.models import BoxEditTool, ColumnDataSource, FreehandDrawTool
-from bokeh.plotting import figure, output_file, show
-from bokeh.themes import built_in_themes
-from bokeh.io import curdoc
 
 def create_logger():
     """Create a console logger"""
@@ -186,15 +182,15 @@ def main():
 
     if args.imagename and args.maskname:
         parser.error("Either --restored-image or --mask-image must be specified, but not both")
+    elif not args.imagename and not args.maskname:
+        parser.error("Either --restored-image or --mask-image must be specified")
 
     # define input file, and get its name and extension
     input_file = args.imagename or args.maskname
-#    name, ext = os.path.split(input_file)
     name = '.'.join(input_file.split('.')[:-1])
     ext = input_file.split('.')[-1]
 
     # first, load or generate mask
-
     if args.imagename:
         input_image, input_header = get_image(input_file)
         LOGGER.info(f"Generating mask using threshold {threshold}")
@@ -348,7 +344,13 @@ def main():
         LOGGER.info(f"Number of extended islands found: {len(extended_islands)}")
 
     if args.gui:
-        curdoc().theme = 'caliber'
+        try:
+            from bokeh.models import BoxEditTool, ColumnDataSource, FreehandDrawTool
+            from bokeh.plotting import figure, output_file, show
+            from bokeh.io import curdoc
+            curdoc().theme = 'caliber'
+        except ModuleNotFoundError:
+            LOGGER.error("Running breizorro gui requires optional dependencies, please re-install with: pip install breizorro[gui]")
 
         LOGGER.info("Loading Gui ...")
         d = mask_image

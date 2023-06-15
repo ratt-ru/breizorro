@@ -1,0 +1,57 @@
+[tool.poetry]
+name = "breizorro"
+version = "0.1.2"
+description = "Creates a binary mask given a FITS image"
+authors = ["Ian Heywood & RATT <ian.heywood@phyics.ox.ac.uk>"]
+readme = "README.rst"
+homepage = "https://github.com/ratt-ru/breizorro"
+repository = "https://github.com/ratt-ru/breizorro.git"
+keywords = ["Astronomy", "Masking", "Imaging"]
+classifiers = [
+          "Development Status :: 5 - Production/Stable",
+          "Intended Audience :: Science/Research",
+          "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+          "Operating System :: POSIX :: Linux",
+          "Programming Language :: Python",
+          "Topic :: Scientific/Engineering :: Astronomy"
+]
+license = "GNU GPL v3"
+packages = [
+    {include = "breizorro"},
+]
+
+[tool.poetry.scripts]
+breizorro = "breizorro.main:driver"
+
+[tool.poetry.dependencies]
+python = "^3.8"
+astropy = "*"
+numpy = "*"
+regions = "*"
+scipy = "*"
+
+# Optional dependencies start here
+bokeh = { version = "*", optional = true}
+pytest = { version = "*", optional=true }
+pytest-flake8 = { version = "*", optional=true }
+
+[build-system]
+requires = ["setuptools", "poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.extras]
+gui = ["bokeh"]
+testing = ["pytest", "pytest-flake8"]
+
+[tool.poetry.group.tests]
+optional = true
+[tool.poetry.group.tests.dependencies]
+pytest = "*"
+flake8 = "*"
+
+[tool.poetry.group.docs]
+optional = true
+[tool.poetry.group.docs.dependencies]
+Sphinx = "^5.3.0"
+sphinx-copybutton = "^0.5.0"
+furo = "^2022.9.15"

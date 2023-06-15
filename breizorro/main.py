@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-
 from breizorro.breizorro import main
 
-main()
+def driver():
+    main()

@@ -8,6 +8,9 @@ on:
     tags:
       - '**'
 
+env:
+  POETRY_VERSION: 1.4.0
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -18,20 +21,35 @@ jobs:
        github.event.ref == 'refs/heads/master')
     steps:
       - name: Set up Python 3
-        uses: actions/setup-python@v1
+        uses: actions/setup-python@v4
         with:
           python-version: '3.x'
 
-      - name: Install latest setuptools, wheel, pip
-        run: python3 -m pip install -U pip setuptools wheel
+      - name: Cache Installations
+        id: cache-installs
+        uses: actions/cache@v3
+        with:
+          path: ~/.local
+          key: install-${{ env.INSTALL_CACHE_HASH }}-2
+
+      - name: Install Poetry
+        if: steps.cache-installs.outputs.cache-hit != 'true'
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 - --version ${{ env.POETRY_VERSION }}
+
+      - name: Test poetry
+        run: poetry --version
 
       - name: Checkout source
         uses: actions/checkout@v2
         with:
           fetch-depth: 1
 
-      - name: Build distributions
-        run: python setup.py sdist bdist_wheel
+      - name: Install breizorro
+        run: poetry install
+
+      - name: Build distribution
+        run: poetry build
 
       - name: Publish distribution 📦 to Test PyPI
         uses: pypa/gh-action-pypi-publish@master

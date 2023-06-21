@@ -41,7 +41,7 @@ To show help message and exit
                       [--extract-islands N|COORD [N|COORD ...]]
                       [--minimum-size MINSIZE] [--make-binary] [--invert]
                       [--dilate R] [--erode N] [--fill-holes] [--sum-peak SUM_PEAK]
-                      [-o OUTFILE] [--gui]
+                      [-o OUTFILE] [--save-regions OUTREGION] [--gui]
 
      breizorro [options] --restored-image restored_image
 
@@ -86,7 +86,9 @@ To show help message and exit
                                 ratio above 100
           -o OUTFILE, --outfile OUTFILE
                                 Suffix for mask image (default based on input name
-          --gui                 Open mask in gui.
+          --save-regions OUTREGION
+                                Generate polygon regions from the mask
+          --gui                 Open mask in gui
 
 =======
 License

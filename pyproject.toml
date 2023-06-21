@@ -29,6 +29,7 @@ astropy = "*"
 numpy = "*"
 regions = "*"
 scipy = "*"
+scikit-image = "*"
 
 # Optional dependencies start here
 bokeh = { version = "*", optional = true}

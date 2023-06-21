@@ -205,7 +205,7 @@ def main():
             shutil.copyfile(input_file, noise_fits)
             flush_fits(noise_image, noise_fits)
 
-        mask_image = input_image > threshold * noise_image
+        mask_image = (input_image > threshold * noise_image).astype('float64')
 
         mask_image[:, -1]=0
         mask_image[:, 0]=0
@@ -371,7 +371,7 @@ def main():
             from bokeh.io import curdoc
             curdoc().theme = 'caliber'
         except ModuleNotFoundError:
-            Logger.error("Running breizorro gui requires optional dependencies, please re-install with: pip install breizorro[gui]")
+            LOGGER.error("Running breizorro gui requires optional dependencies, please re-install with: pip install breizorro[gui]")
 
         LOGGER.info("Loading Gui ...")
         d = mask_image

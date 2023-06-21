@@ -24,6 +24,7 @@ packages = [
 breizorro = "breizorro.main:driver"
 
 [tool.poetry.dependencies]
+python = "^3.8"
 astropy = "*"
 numpy = "*"
 regions = "*"
@@ -32,6 +33,8 @@ scikit-image = "*"
 
 # Optional dependencies start here
 bokeh = { version = "*", optional = true}
+pytest = { version = "*", optional=true }
+pytest-flake8 = { version = "*", optional=true }
 
 [build-system]
 requires = ["setuptools", "poetry-core"]
@@ -39,11 +42,12 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.extras]
 gui = ["bokeh"]
+testing = ["pytest", "pytest-flake8"]
 
 [tool.poetry.group.tests]
 optional = true
 [tool.poetry.group.tests.dependencies]
-pytest = "^7.1.3"
+pytest = "*"
 flake8 = "*"
 
 [tool.poetry.group.docs]

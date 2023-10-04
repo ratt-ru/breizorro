@@ -242,6 +242,8 @@ def main():
 
 
     if args.merge:
+        # replace NaN values with zeros
+        mask_image = np.nan_to_num(mask_image, nan=0)
         for merge in args.merge:
             fits, regs = load_fits_or_region(merge)
             if fits:

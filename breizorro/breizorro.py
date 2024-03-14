@@ -6,10 +6,16 @@ import argparse
 import os.path
 import re
 import numpy as np
+
 from astropy.io import fits
-from astropy.coordinates import SkyCoord
 from astropy.wcs import WCS
+from astropy.coordinates import Angle
+from astropy.coordinates import SkyCoord
+
 import regions
+from regions import PixCoord
+from regions import PolygonSkyRegion, PolygonPixelRegion
+
 from argparse import ArgumentParser
 
 from scipy.ndimage.morphology import binary_dilation, binary_erosion, binary_fill_holes
@@ -17,6 +23,12 @@ from scipy.ndimage.measurements import label, find_objects
 import scipy.special
 import scipy.ndimage
 
+from skimage.draw import polygon as skimage_polygon
+from skimage.measure import find_contours
+
+from multiprocessing import Process, Queue
+
+from operator import itemgetter, attrgetter
 
 def create_logger():
     """Create a console logger"""
@@ -86,6 +98,7 @@ def make_noise_map(restored_image, boxsize):
     LOGGER.info(f"Median noise value is {median_noise}")
     return noise
 
+
 def resolve_island(isl_spec, mask_image, wcs, ignore_missing=False):
     if re.match("^\d+$", isl_spec):
         return int(isl_spec)
@@ -104,11 +117,13 @@ def resolve_island(isl_spec, mask_image, wcs, ignore_missing=False):
             raise ValueError(f"coordinates {c} do not select a valid island")
     return value
 
+
 def add_regions(mask_image, regs, wcs):
     for reg in regs:
         if hasattr(reg, 'to_pixel'):
             reg = reg.to_pixel(wcs)
         mask_image += reg.to_mask().to_image(mask_image.shape)
+
 
 def remove_regions(mask_image, regs, wcs):
     for reg in regs:
@@ -116,6 +131,362 @@ def remove_regions(mask_image, regs, wcs):
             reg = reg.to_pixel(wcs)
         mask_image[reg.to_mask().to_image(mask_image.shape) != 0] = 0
 
+
+def contour_worker(input, output):
+    for func, args in iter(input.get, 'STOP'):
+        result = func(*args)
+        output.put(result)
+
+
+def calculate_weighted_centroid(x, y, flux_values):
+    # Calculate the total flux within the region
+    total_flux = np.sum(flux_values)
+    # Initialize variables for weighted sums
+    weighted_sum_x = 0
+    weighted_sum_y = 0
+    # Loop through all pixels within the region
+    for xi, yi, flux in zip(x, y, flux_values):
+        # Add the weighted contribution of each pixel to the centroid
+        weighted_sum_x += xi * flux
+        weighted_sum_y += yi * flux
+    # Calculate the centroid coordinates
+    centroid_x = weighted_sum_x / total_flux
+    centroid_y = weighted_sum_y / total_flux
+    return centroid_x, centroid_y
+
+
+def process_contour(x, y, image_data, fitsinfo, flux_cutoff, noise_out, beam):
+    rr, cc = skimage_polygon(x,y)
+    data_result = image_data[rr, cc]
+    pixel_size = fitsinfo['ddec'] * 3600.0
+    if fitsinfo['b_size']:
+        bmaj,bmin,_ = np.array(fitsinfo['b_size']) * 3600.0
+        mean_beam = 0.5 * (bmaj + bmin)
+    else:
+        mean_beam = beam
+    pixels_beam = calculate_area(bmaj, bmin, pixel_size)
+    total_flux =  data_result.sum() / pixels_beam
+    contained_points = len(rr) # needed for estimating flux density error
+    use_max = 0
+    lon = 0 
+    wcs = fitsinfo['wcs']
+    while len(wcs.array_shape) > 2:
+        wcs = wcs.dropaxis(len(wcs.array_shape) - 1)
+    try:
+        peak_flux = data_result.max()
+    except: 
+        LOGGER.warn('Failure to get maximum within contour')
+        LOGGER.info('Probably a contour at edge of image - skipping')
+        peak_flux = 0.0
+    if peak_flux >= flux_cutoff:
+        total_peak_ratio =  np.abs((total_flux - peak_flux) / total_flux)
+        beam_error = contained_points/pixels_beam  * noise_out 
+        ten_pc_error = 0.1 * total_flux
+        flux_density_error = np.sqrt(ten_pc_error * ten_pc_error + beam_error * beam_error)
+        contour = []
+        for i in range(len(x)):
+            contour.append([x[i],y[i]])
+        centroid = calculate_weighted_centroid(x,y, data_result)
+        pix_centroid = PixCoord(centroid[0], centroid[1])
+        contour_pixels = PixCoord(np.array(x), np.array(y))
+        p = PolygonPixelRegion(vertices=contour_pixels, meta={'label': 'Region'})
+        if p.contains(pix_centroid)[0]:
+            ra, dec = wcs.all_pix2world(pix_centroid.x, pix_centroid.y,0)
+        else:
+            use_max = 1
+            LOGGER.warn('centroid lies outside polygon - using peak position')
+            location = np.unravel_index(np.argmax(data_result, axis=None), data_result.shape)
+            x_pos = rr[location]
+            y_pos = cc[location]
+            data_max = image_data[x_pos,y_pos]
+            pos_pixels = PixCoord(x_pos, y_pos)
+            ra, dec = wcs.all_pix2world(pos_pixels.x, pos_pixels.y, 0)
+
+        source_flux = (round(total_flux * 1000, 3), round(flux_density_error * 1000, 4))
+        source_size = get_source_size(contour, pixel_size, mean_beam, image_data, total_peak_ratio)
+        source_pos = format_source_coordinates(ra, dec)
+        source = source_pos + (ra, dec) + (total_flux, flux_density_error) + source_size
+        catalog_out = ', '.join(str(src_prop) for src_prop in source)
+    else:
+        # Dummy source to be eliminated
+        lon = -np.inf 
+        catalog_out = ''
+    return (ra, catalog_out, use_max)
+
+def deg_to_hms(ra_deg):
+    ra_hours = ra_deg / 15  # 360 degrees = 24 hours
+    hours = int(ra_hours)
+    minutes = int((ra_hours - hours) * 60)
+    seconds = (ra_hours - hours - minutes / 60) * 3600
+    return hours, minutes, seconds
+
+def deg_to_dms(dec_deg):
+    degrees = int(dec_deg)
+    dec_minutes = abs(dec_deg - degrees) * 60
+    minutes = int(dec_minutes)
+    seconds = (dec_minutes - minutes) * 60
+    return degrees, minutes, seconds
+
+def format_source_coordinates(coord_x_deg, coord_y_deg):
+    h,m,s = deg_to_hms(coord_x_deg)
+    if h < 10:
+        h  = '0' + str(h)
+    else:
+        h = str(h)
+    if m < 10:
+        m = '0' + str(m)
+    else:
+        m = str(m)
+    s = round(s,2)
+    if s < 10:
+        s = '0' + str(s)
+    else:
+        s = str(s)
+    if len(s) < 5:
+        s = s + '0'
+
+    d,m,s = deg_to_dms(coord_y_deg)
+    if d >= 0 and d < 10:
+        d = '0' + str(d)
+    elif d < 0 and abs(d) < 10:
+        d = '-0' + str(d)
+    else:
+        d = str(d)
+    if m < 10:
+        m = '0' + str(m)
+    else:
+        m = str(m)
+    s = round(s,2)
+    if s < 10:
+        s = '0' + str(s)
+    else:
+        s = str(s)
+    if len(s) < 5:
+        s = s + '0'
+
+    h_m_s = h + ':' + m + ':' + s
+    d_m_s = d + ':' + m + ':' + s
+    src_pos = (h_m_s,  d_m_s)
+    return src_pos
+
+def maxDist(contour, pixel_size):
+    """Calculate maximum extent and position angle of a contour.
+
+    Parameters:
+    contour : list of [x, y] pairs
+        List of coordinates defining the contour.
+    pixel_size : float
+        Size of a pixel in the image (e.g., arcseconds per pixel).
+
+    Returns:
+    ang_size : float
+        Maximum extent of the contour in angular units (e.g., arcseconds).
+    pos_angle : float
+        Position angle of the contour (in degrees).
+    """
+    src_size = 0
+    pos_angle = None
+
+    # Convert the contour to a numpy array for easier calculations
+    contour_array = np.array(contour)
+
+    # Calculate pairwise distances between all points in the contour
+    for i in range(len(contour_array)):
+        for j in range(i+1, len(contour_array)):
+            # Calculate Euclidean distance between points i and j
+            distance = np.linalg.norm(contour_array[i] - contour_array[j]) * pixel_size
+
+            # Calculate positional angle between points i and j
+            dx, dy = contour_array[j] - contour_array[i]
+            angle = np.degrees(np.arctan2(dy, dx))
+
+            # Update max_distance, max_points, and pos_angle if the calculated distance is greater
+            if distance > src_size:
+                src_size = distance
+                pos_angle = angle
+
+    return src_size, pos_angle
+
+
+def get_source_size(contour, pixel_size, mean_beam, image, int_peak_ratio):
+    result = maxDist(contour,pixel_size)
+    src_angle = result[0]
+    pos_angle = result[1]
+    contour_pixels = PixCoord([c[0] for c in contour], [c[1] for c in contour])
+    p = PolygonPixelRegion(vertices=contour_pixels, meta={'label': 'Region'})
+    source_beam_ratio =  p.area / mean_beam
+    # first test for point source
+    point_source = False
+    if (int_peak_ratio <= 0.2) or (src_angle <= mean_beam):
+        point_source = True
+    if source_beam_ratio <=  1.0:
+        point_source = True
+    if point_source:
+        src_size = (0.0, 0.0)
+        print(f"Point source because {int_peak_ratio} <= 0.2 and {src_angle} <= {mean_beam}")
+    else:
+        ang = round(src_angle,2)
+        pa = round(pos_angle,2)
+        src_size = (ang, pa)
+    return src_size
+
+
+def fitsInfo(fitsname=None):
+    """Get fits header info.
+
+    Parameters
+    ----------
+    fitsname : fits file
+        Restored image (cube)
+
+    Returns
+    -------
+    fitsinfo : dict
+        Dictionary of fits information
+        e.g. {'wcs': wcs, 'ra': ra, 'dec': dec,
+        'dra': dra, 'ddec': ddec, 'raPix': raPix,
+        'decPix': decPix,  'b_size': beam_size,
+        'numPix': numPix, 'centre': centre,
+        'skyArea': skyArea, 'naxis': naxis}
+
+    """
+    hdu = fits.open(fitsname)
+    hdr = hdu[0].header
+    ra = hdr['CRVAL1']
+    dra = abs(hdr['CDELT1'])
+    raPix = hdr['CRPIX1']
+    dec = hdr['CRVAL2']
+    ddec = abs(hdr['CDELT2'])
+    decPix = hdr['CRPIX2']
+    wcs = WCS(hdr)
+    numPix = hdr['NAXIS1']
+    naxis = hdr['NAXIS']
+    try:
+        beam_size = (hdr['BMAJ'], hdr['BMIN'], hdr['BPA'])
+    except:
+        beam_size = None
+    try:
+        centre = (hdr['CRVAL1'], hdr['CRVAL2'])
+    except:
+        centre = None
+    try:
+        freq0=None
+        for i in range(1, hdr['NAXIS']+1):
+            if hdr['CTYPE{0:d}'.format(i)].startswith('FREQ'):
+                freq0 = hdr['CRVAL{0:d}'.format(i)]
+    except:
+        freq0=None
+
+    skyArea = (numPix * ddec) ** 2
+    fitsinfo = {'wcs': wcs, 'ra': ra, 'dec': dec, 'naxis': naxis,
+                'dra': dra, 'ddec': ddec, 'raPix': raPix,
+                'decPix': decPix, 'b_size': beam_size,
+                'numPix': numPix, 'centre': centre,
+                'skyArea': skyArea, 'freq0': freq0}
+    return fitsinfo
+
+
+def calculate_area(b_major, b_minor, pixel_size):
+    """
+    Calculate the area of an ellipse represented by its major and minor axes,
+    given the pixel size.
+
+    Parameters:
+        b_major (float): Major axis of the ellipse in arcseconds.
+        b_minor (float): Minor axis of the ellipse in arcseconds.
+        pixel_size (float): Pixel size in arcseconds.
+
+    Returns:
+        float: Calculated area of the ellipse in square pixels.
+    """
+    # Calculate the semi-major and semi-minor axes in pixels
+    a_pixels = b_major / pixel_size
+    b_pixels = b_minor / pixel_size
+    
+    # Calculate the area of the ellipse using the formula: π * a * b
+    area = np.pi * a_pixels * b_pixels
+    
+    return area
+
+
+def generate_source_list(filename, outfile, mask_image, threshold_value, noise, num_processors, mean_beam):
+    image_data, hdu_header = get_image(filename)
+    fitsinfo = fitsInfo(filename)
+    f = open(outfile, 'w')
+    catalog_out = f'# processing fits image: {filename}  \n'
+    f.write(catalog_out)
+    incoming_dimensions = fitsinfo['naxis']
+    pixel_size = fitsinfo['ddec'] * 3600.0
+    if mean_beam:
+        LOGGER.info(f'Using user provided size: {mean_beam}')
+    elif fitsinfo['b_size']:
+        bmaj,bmin,_ = np.array(fitsinfo['b_size']) * 3600.0
+        mean_beam = 0.5 * (bmaj + bmin)
+    else:
+        raise('No beam information found. Specify mean beam in arcsec: --beam-size 5')
+    catalog_out = f'# mean beam size (arcsec): {round(mean_beam,2)} \n' 
+    f.write(catalog_out)
+    catalog_out = f'original image peak flux (Jy/beam): {image_data.max()} \n'
+    f.write(catalog_out)
+    catalog_out = f'# noise out (µJy/beam): {round(noise*1000000,2)} \n'
+    f.write(catalog_out)
+    limiting_flux = noise * threshold_value
+    catalog_out = f'# limiting_flux (mJy/beam): {round(limiting_flux*1000,2)}  \n'
+    f.write(catalog_out)
+
+    contours = find_contours(mask_image, 0.5)
+    # Start worker processes
+    if not num_processors:
+        try:
+            import multiprocessing
+            num_processors =  multiprocessing.cpu_count()
+            LOGGER.info(f'Setting number of processors to {num_processors}')
+        except:
+            pass
+    TASKS = []
+    for i in range(len(contours)):
+        contour = contours[i]
+        if len(contour) > 2:
+            x = []
+            y = []
+            for j in range(len(contour)):
+                x.append(contour[j][0])
+                y.append(contour[j][1])
+            TASKS.append((process_contour,(x,y, image_data, fitsinfo, limiting_flux, noise, mean_beam)))
+    task_queue = Queue()
+    done_queue = Queue()
+    # Submit tasks
+    LOGGER.info('Submitting distributed tasks. This might take a while...')
+    for task in TASKS:
+        task_queue.put(task)
+    for i in range(num_processors):
+        Process(target=contour_worker, args=(task_queue, done_queue)).start()
+
+    source_list = []
+    num_max = 0
+    # Get the results from parallel processing
+    for i in range(len(TASKS)):
+        catalog_out = done_queue.get(timeout=300)
+        if catalog_out[0] > -np.inf:
+            source_list.append(catalog_out)
+            num_max += catalog_out[2]
+    # Tell child processes to stop
+    for i in range(num_processors):
+        task_queue.put('STOP')
+
+    ra_sorted_list = sorted(source_list, key = itemgetter(0))
+    LOGGER.info(f'Number of sources detected {len(ra_sorted_list)}')
+    catalog_out = f'# number of sources detected {len(ra_sorted_list)} \n'
+    f.write(catalog_out)
+    catalog_out = f'# number of souces using peak for source position: {num_max} \n'
+    f.write(catalog_out)
+    catalog_out = '#\n#  source    ra_hms  dec_dms ra(deg)  dec(deg)    flux(mJy)  error ang_size_(arcsec)  pos_angle_(deg)\n'
+    f.write(catalog_out)
+    for i in range(len(ra_sorted_list)):
+       output = str(i) + ', ' + ra_sorted_list[i][1] + '\n'
+       f.write(output)
+    f.close()
+    return source_list
 
 def main():
     LOGGER.info("Welcome to breizorro")
@@ -167,9 +538,18 @@ def main():
     parser.add_argument('--sum-peak', dest='sum_peak', default=None,
                         help='Sum to peak ratio of flux islands to mask in original image.'
                              'e.g. --sum-peak 100 will mask everything with a ratio above 100')
+    parser.add_argument('-ncpu', '--ncpu', dest='ncpu', default=None,
+                        help='Number of processors to use for cataloging.')
+    parser.add_argument('-beam', '--beam-size', dest='beam', default=None,
+                        help='Average beam size in arcesc incase beam info is missing in image header.')
 
     parser.add_argument('-o', '--outfile', dest='outfile', default='',
                         help='Suffix for mask image (default based on input name')
+    parser.add_argument('--save-catalog', dest='outcatalog', default='',
+                        help='Generate catalog based on region mask')
+    parser.add_argument('--save-regions', dest='outregion', default='',
+                         help='Generate polygon regions from the mask')
+
 
     parser.add_argument('--gui', dest='gui', action='store_true', default=False,
                          help='Open mask in gui.')
@@ -343,23 +723,81 @@ def main():
         mask_image = input_image * new_mask_image
         LOGGER.info(f"Number of extended islands found: {len(extended_islands)}")
 
+    if args.outregion:
+        contours = find_contours(mask_image, 0.5)
+        polygon_regions = []
+        for contour in contours:
+            # Convert the contour points to pixel coordinates
+            contour_pixels = contour
+            # Convert the pixel coordinates to Sky coordinates
+            contour_sky = wcs.pixel_to_world(contour_pixels[:, 1], contour_pixels[:, 0])
+            # Create a Polygon region from the Sky coordinates
+            polygon_region = PolygonSkyRegion(vertices=contour_sky, meta={'label': 'Region'})
+            # Add the polygon region to the list
+            polygon_regions.append(polygon_region)
+        regions.Regions(polygon_regions).write(args.outregion, format='ds9')
+        LOGGER.info(f"Number of regions found: {len(polygon_regions)}")
+        LOGGER.info(f"Saving regions in {args.outregion}")
+
+
+    if args.outcatalog:
+        num_proc = None # Assign based on the number of processors on a system
+        if args.ncpu:
+            num_proc = int(args.ncpu)
+        mean_beam = None # Use beam info from the image header by default
+        if args.beam:
+            mean_beam = float(args.beam)
+        noise = np.median(noise_image)
+        source_list = generate_source_list(args.imagename, args.outcatalog, mask_image,
+                                           threshold, noise, num_proc, mean_beam)
+        LOGGER.info(f'Source catalog saved: {args.outcatalog}')
+
     if args.gui:
         try:
-            from bokeh.models import BoxEditTool, ColumnDataSource, FreehandDrawTool
+            from bokeh.models import Label, BoxEditTool, ColumnDataSource, FreehandDrawTool
             from bokeh.plotting import figure, output_file, show
+            from bokeh.io import curdoc, export_png
             from bokeh.io import curdoc
             curdoc().theme = 'caliber'
         except ModuleNotFoundError:
             LOGGER.error("Running breizorro gui requires optional dependencies, please re-install with: pip install breizorro[gui]")
+            raise('Missing GUI dependencies')
 
         LOGGER.info("Loading Gui ...")
-        d = mask_image
+        fitsinfo = fitsInfo(args.imagename or args.maskname)
+
+        # Origin coordinates
+        origin_ra, origin_dec = fitsinfo['centre']
+
+        # Pixel width in degrees
+        pixel_width = fitsinfo['ddec']
+
+        # Calculate the extent of the image in degrees
+        # We assume a square image for simplicity
+        extent = fitsinfo['numPix'] * pixel_width  # Assume equal pixels in each dimension
+
+        # Specify the coordinates for the image
+        xy_origin = (origin_ra - extent/2.0, origin_dec - extent/2.0)
+
+        # Define the plot
         p = figure(tooltips=[("x", "$x"), ("y", "$y"), ("value", "@image")])
-        p.x_range.range_padding = p.y_range.range_padding = 0
+        p.x_range.range_padding = 0
+        p.x_range.flipped = True
         p.title.text = out_mask_fits
 
         # must give a vector of image data for image parameter
-        p.image(image=[d], x=0, y=0, dw=10, dh=10, palette="Greys256", level="image")
+        # Plot the image using degree coordinates
+        p.image(image=[np.flip(mask_image, axis=1)], x=xy_origin[0], y=xy_origin[1], dw=extent, dh=extent, palette="Greys256", level="image")
+
+
+        # Extracting data from source_list
+        x_coords = [float(d[1].split(', ')[2]) for d in source_list]
+        y_coords = [float(d[1].split(', ')[3]) for d in source_list]
+        labels = [f"({d[1].split(', ')[0]}, {d[1].split(', ')[1]})" for d in source_list]
+        # Plotting points
+        p.circle(x_coords, y_coords, size=1, color="red", alpha=0.5)
+        #for i, (x, y, label) in enumerate(zip(x_coords, y_coords, labels)):
+        #    p.add_layout(Label(x=x, y=y, text=label, text_baseline="middle", text_align="center", text_font_size="10pt"))
         p.grid.grid_line_width = 0.5
         src1 = ColumnDataSource({'x': [], 'y': [], 'width': [], 'height': [], 'alpha': []})
         src2 = ColumnDataSource({'xs': [], 'ys': [], 'alpha': []})
@@ -371,11 +809,12 @@ def main():
         p.add_tools(draw_tool2)
         p.toolbar.active_drag = draw_tool1
         output_file("breizorro.html", title="Mask Editor")
+        export_png(p, filename="breizorro.png")
         show(p)
 
-        LOGGER.info(f"Enforcing that mask to binary")
-        mask_image = mask_image!=0
-        mask_header['BUNIT'] = 'mask'
+    LOGGER.info(f"Enforcing that mask to binary")
+    mask_image = mask_image!=0
+    mask_header['BUNIT'] = 'mask'
 
     shutil.copyfile(input_file, out_mask_fits)  # to provide a template
     flush_fits(mask_image, out_mask_fits, mask_header)

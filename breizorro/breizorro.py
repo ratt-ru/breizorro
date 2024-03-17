@@ -166,6 +166,7 @@ def process_contour(x, y, image_data, fitsinfo, flux_cutoff, noise_out, beam):
         mean_beam = beam
     pixels_beam = calculate_area(bmaj, bmin, pixel_size)
     total_flux =  data_result.sum() / pixels_beam
+    print(total_flux)
     contained_points = len(rr) # needed for estimating flux density error
     use_max = 0
     lon = 0 
@@ -186,21 +187,26 @@ def process_contour(x, y, image_data, fitsinfo, flux_cutoff, noise_out, beam):
         contour = []
         for i in range(len(x)):
             contour.append([x[i],y[i]])
-        centroid = calculate_weighted_centroid(x,y, data_result)
-        pix_centroid = PixCoord(centroid[0], centroid[1])
-        contour_pixels = PixCoord(np.array(x), np.array(y))
-        p = PolygonPixelRegion(vertices=contour_pixels, meta={'label': 'Region'})
-        if p.contains(pix_centroid)[0]:
-            ra, dec = wcs.all_pix2world(pix_centroid.x, pix_centroid.y,0)
-        else:
+        #centroid = calculate_weighted_centroid(x,y, data_result)
+        #pix_centroid = PixCoord(centroid[0], centroid[1])
+        #contour_pixels = PixCoord(np.array(x), np.array(y))
+        #p = PolygonPixelRegion(vertices=contour_pixels, meta={'label': 'Region'})
+        #ra, dec = wcs.all_pix2world(pix_centroid.x, pix_centroid.y,0)
+        #if p.contains(pix_centroid)[0]:
+        #    ra, dec = wcs.all_pix2world(pix_centroid.x, pix_centroid.y,0)
+        #else:
+        if True:
             use_max = 1
             LOGGER.warn('centroid lies outside polygon - using peak position')
             location = np.unravel_index(np.argmax(data_result, axis=None), data_result.shape)
             x_pos = rr[location]
             y_pos = cc[location]
+            data_max = image_data[x_pos,y_pos] / pixels_beam
             data_max = image_data[x_pos,y_pos]
             pos_pixels = PixCoord(x_pos, y_pos)
             ra, dec = wcs.all_pix2world(pos_pixels.x, pos_pixels.y, 0)
+            print(data_max)
+            print(f'{ra},{dec}')
 
         source_flux = (round(total_flux * 1000, 3), round(flux_density_error * 1000, 4))
         source_size = get_source_size(contour, pixel_size, mean_beam, image_data, total_peak_ratio)
@@ -244,6 +250,7 @@ def format_source_coordinates(coord_x_deg, coord_y_deg):
         s = str(s)
     if len(s) < 5:
         s = s + '0'
+    h_m_s = h + ':' + m + ':' + s
 
     d,m,s = deg_to_dms(coord_y_deg)
     if d >= 0 and d < 10:
@@ -263,9 +270,8 @@ def format_source_coordinates(coord_x_deg, coord_y_deg):
         s = str(s)
     if len(s) < 5:
         s = s + '0'
-
-    h_m_s = h + ':' + m + ':' + s
     d_m_s = d + ':' + m + ':' + s
+
     src_pos = (h_m_s,  d_m_s)
     return src_pos
 
@@ -426,7 +432,7 @@ def generate_source_list(filename, outfile, mask_image, threshold_value, noise, 
         raise('No beam information found. Specify mean beam in arcsec: --beam-size 5')
     catalog_out = f'# mean beam size (arcsec): {round(mean_beam,2)} \n' 
     f.write(catalog_out)
-    catalog_out = f'original image peak flux (Jy/beam): {image_data.max()} \n'
+    catalog_out = f'# original image peak flux (Jy/beam): {image_data.max()} \n'
     f.write(catalog_out)
     catalog_out = f'# noise out (µJy/beam): {round(noise*1000000,2)} \n'
     f.write(catalog_out)
@@ -777,17 +783,18 @@ def main():
         extent = fitsinfo['numPix'] * pixel_width  # Assume equal pixels in each dimension
 
         # Specify the coordinates for the image
-        xy_origin = (origin_ra - extent/2.0, origin_dec - extent/2.0)
+        x_range = (origin_ra - extent/2.0, origin_ra + extent/2.0)
+        y_range = (origin_dec - extent/2.0, origin_dec + extent/2.0)
 
         # Define the plot
-        p = figure(tooltips=[("x", "$x"), ("y", "$y"), ("value", "@image")])
+        p = figure(tooltips=[("x", "$x"), ("y", "$y"), ("value", "@image")], y_range=y_range)
         p.x_range.range_padding = 0
         p.x_range.flipped = True
         p.title.text = out_mask_fits
 
         # must give a vector of image data for image parameter
         # Plot the image using degree coordinates
-        p.image(image=[np.flip(mask_image, axis=1)], x=xy_origin[0], y=xy_origin[1], dw=extent, dh=extent, palette="Greys256", level="image")
+        p.image(image=[np.flip(mask_image, axis=1)], x=x_range[0], y=y_range[0], dw=extent, dh=extent, palette="Greys256", level="image")
 
 
         # Extracting data from source_list
@@ -795,9 +802,9 @@ def main():
         y_coords = [float(d[1].split(', ')[3]) for d in source_list]
         labels = [f"({d[1].split(', ')[0]}, {d[1].split(', ')[1]})" for d in source_list]
         # Plotting points
-        p.circle(x_coords, y_coords, size=1, color="red", alpha=0.5)
-        #for i, (x, y, label) in enumerate(zip(x_coords, y_coords, labels)):
-        #    p.add_layout(Label(x=x, y=y, text=label, text_baseline="middle", text_align="center", text_font_size="10pt"))
+        p.circle(x_coords, y_coords, size=3, color="red", alpha=0.5)
+        for i, (x, y, label) in enumerate(zip(x_coords, y_coords, labels)):
+            p.add_layout(Label(x=x, y=y, text=label, text_baseline="middle", text_align="center", text_font_size="10pt"))
         p.grid.grid_line_width = 0.5
         src1 = ColumnDataSource({'x': [], 'y': [], 'width': [], 'height': [], 'alpha': []})
         src2 = ColumnDataSource({'xs': [], 'ys': [], 'alpha': []})

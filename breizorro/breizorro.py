@@ -30,6 +30,10 @@ from multiprocessing import Process, Queue
 
 from operator import itemgetter, attrgetter
 
+from breizorro.utils import get_source_size, format_source_coordinates 
+from breizorro.utils import fitsInfo 
+
+
 def create_logger():
     """Create a console logger"""
     log = logging.getLogger(__name__)
@@ -132,30 +136,8 @@ def remove_regions(mask_image, regs, wcs):
         mask_image[reg.to_mask().to_image(mask_image.shape) != 0] = 0
 
 
-def contour_worker(input, output):
-    for func, args in iter(input.get, 'STOP'):
-        result = func(*args)
-        output.put(result)
+def process_contour(contour, image_data, fitsinfo, flux_cutoff, noise_out, beam):
 
-
-def calculate_weighted_centroid(x, y, flux_values):
-    # Calculate the total flux within the region
-    total_flux = np.sum(flux_values)
-    # Initialize variables for weighted sums
-    weighted_sum_x = 0
-    weighted_sum_y = 0
-    # Loop through all pixels within the region
-    for xi, yi, flux in zip(x, y, flux_values):
-        # Add the weighted contribution of each pixel to the centroid
-        weighted_sum_x += xi * flux
-        weighted_sum_y += yi * flux
-    # Calculate the centroid coordinates
-    centroid_x = weighted_sum_x / total_flux
-    centroid_y = weighted_sum_y / total_flux
-    return centroid_x, centroid_y
-
-
-def process_contour(x, y, image_data, fitsinfo, flux_cutoff, noise_out, beam):
     rr, cc = skimage_polygon(x,y)
     data_result = image_data[rr, cc]
     pixel_size = fitsinfo['ddec'] * 3600.0
@@ -219,233 +201,20 @@ def process_contour(x, y, image_data, fitsinfo, flux_cutoff, noise_out, beam):
         catalog_out = ''
     return (ra, catalog_out, use_max)
 
-def deg_to_hms(ra_deg):
-    ra_hours = ra_deg / 15  # 360 degrees = 24 hours
-    hours = int(ra_hours)
-    minutes = int((ra_hours - hours) * 60)
-    seconds = (ra_hours - hours - minutes / 60) * 3600
-    return hours, minutes, seconds
 
-def deg_to_dms(dec_deg):
-    degrees = int(dec_deg)
-    dec_minutes = abs(dec_deg - degrees) * 60
-    minutes = int(dec_minutes)
-    seconds = (dec_minutes - minutes) * 60
-    return degrees, minutes, seconds
+def multiprocess_contour(contours, ncpu=None):
 
-def format_source_coordinates(coord_x_deg, coord_y_deg):
-    h,m,s = deg_to_hms(coord_x_deg)
-    if h < 10:
-        h  = '0' + str(h)
-    else:
-        h = str(h)
-    if m < 10:
-        m = '0' + str(m)
-    else:
-        m = str(m)
-    s = round(s,2)
-    if s < 10:
-        s = '0' + str(s)
-    else:
-        s = str(s)
-    if len(s) < 5:
-        s = s + '0'
-    h_m_s = h + ':' + m + ':' + s
+    def contour_worker(input, output):
+        for func, args in iter(input.get, 'STOP'):
+            result = func(*args)
+            output.put(result)
 
-    d,m,s = deg_to_dms(coord_y_deg)
-    if d >= 0 and d < 10:
-        d = '0' + str(d)
-    elif d < 0 and abs(d) < 10:
-        d = '-0' + str(d)
-    else:
-        d = str(d)
-    if m < 10:
-        m = '0' + str(m)
-    else:
-        m = str(m)
-    s = round(s,2)
-    if s < 10:
-        s = '0' + str(s)
-    else:
-        s = str(s)
-    if len(s) < 5:
-        s = s + '0'
-    d_m_s = d + ':' + m + ':' + s
-
-    src_pos = (h_m_s,  d_m_s)
-    return src_pos
-
-def maxDist(contour, pixel_size):
-    """Calculate maximum extent and position angle of a contour.
-
-    Parameters:
-    contour : list of [x, y] pairs
-        List of coordinates defining the contour.
-    pixel_size : float
-        Size of a pixel in the image (e.g., arcseconds per pixel).
-
-    Returns:
-    ang_size : float
-        Maximum extent of the contour in angular units (e.g., arcseconds).
-    pos_angle : float
-        Position angle of the contour (in degrees).
-    """
-    src_size = 0
-    pos_angle = None
-
-    # Convert the contour to a numpy array for easier calculations
-    contour_array = np.array(contour)
-
-    # Calculate pairwise distances between all points in the contour
-    for i in range(len(contour_array)):
-        for j in range(i+1, len(contour_array)):
-            # Calculate Euclidean distance between points i and j
-            distance = np.linalg.norm(contour_array[i] - contour_array[j]) * pixel_size
-
-            # Calculate positional angle between points i and j
-            dx, dy = contour_array[j] - contour_array[i]
-            angle = np.degrees(np.arctan2(dy, dx))
-
-            # Update max_distance, max_points, and pos_angle if the calculated distance is greater
-            if distance > src_size:
-                src_size = distance
-                pos_angle = angle
-
-    return src_size, pos_angle
-
-
-def get_source_size(contour, pixel_size, mean_beam, image, int_peak_ratio):
-    result = maxDist(contour,pixel_size)
-    src_angle = result[0]
-    pos_angle = result[1]
-    contour_pixels = PixCoord([c[0] for c in contour], [c[1] for c in contour])
-    p = PolygonPixelRegion(vertices=contour_pixels, meta={'label': 'Region'})
-    source_beam_ratio =  p.area / mean_beam
-    # first test for point source
-    point_source = False
-    if (int_peak_ratio <= 0.2) or (src_angle <= mean_beam):
-        point_source = True
-    if source_beam_ratio <=  1.0:
-        point_source = True
-    if point_source:
-        src_size = (0.0, 0.0)
-        print(f"Point source because {int_peak_ratio} <= 0.2 and {src_angle} <= {mean_beam}")
-    else:
-        ang = round(src_angle,2)
-        pa = round(pos_angle,2)
-        src_size = (ang, pa)
-    return src_size
-
-
-def fitsInfo(fitsname=None):
-    """Get fits header info.
-
-    Parameters
-    ----------
-    fitsname : fits file
-        Restored image (cube)
-
-    Returns
-    -------
-    fitsinfo : dict
-        Dictionary of fits information
-        e.g. {'wcs': wcs, 'ra': ra, 'dec': dec,
-        'dra': dra, 'ddec': ddec, 'raPix': raPix,
-        'decPix': decPix,  'b_size': beam_size,
-        'numPix': numPix, 'centre': centre,
-        'skyArea': skyArea, 'naxis': naxis}
-
-    """
-    hdu = fits.open(fitsname)
-    hdr = hdu[0].header
-    ra = hdr['CRVAL1']
-    dra = abs(hdr['CDELT1'])
-    raPix = hdr['CRPIX1']
-    dec = hdr['CRVAL2']
-    ddec = abs(hdr['CDELT2'])
-    decPix = hdr['CRPIX2']
-    wcs = WCS(hdr)
-    numPix = hdr['NAXIS1']
-    naxis = hdr['NAXIS']
-    try:
-        beam_size = (hdr['BMAJ'], hdr['BMIN'], hdr['BPA'])
-    except:
-        beam_size = None
-    try:
-        centre = (hdr['CRVAL1'], hdr['CRVAL2'])
-    except:
-        centre = None
-    try:
-        freq0=None
-        for i in range(1, hdr['NAXIS']+1):
-            if hdr['CTYPE{0:d}'.format(i)].startswith('FREQ'):
-                freq0 = hdr['CRVAL{0:d}'.format(i)]
-    except:
-        freq0=None
-
-    skyArea = (numPix * ddec) ** 2
-    fitsinfo = {'wcs': wcs, 'ra': ra, 'dec': dec, 'naxis': naxis,
-                'dra': dra, 'ddec': ddec, 'raPix': raPix,
-                'decPix': decPix, 'b_size': beam_size,
-                'numPix': numPix, 'centre': centre,
-                'skyArea': skyArea, 'freq0': freq0}
-    return fitsinfo
-
-
-def calculate_area(b_major, b_minor, pixel_size):
-    """
-    Calculate the area of an ellipse represented by its major and minor axes,
-    given the pixel size.
-
-    Parameters:
-        b_major (float): Major axis of the ellipse in arcseconds.
-        b_minor (float): Minor axis of the ellipse in arcseconds.
-        pixel_size (float): Pixel size in arcseconds.
-
-    Returns:
-        float: Calculated area of the ellipse in square pixels.
-    """
-    # Calculate the semi-major and semi-minor axes in pixels
-    a_pixels = b_major / pixel_size
-    b_pixels = b_minor / pixel_size
-    
-    # Calculate the area of the ellipse using the formula: π * a * b
-    area = np.pi * a_pixels * b_pixels
-    
-    return area
-
-
-def generate_source_list(filename, outfile, mask_image, threshold_value, noise, num_processors, mean_beam):
-    image_data, hdu_header = get_image(filename)
-    fitsinfo = fitsInfo(filename)
-    f = open(outfile, 'w')
-    catalog_out = f'# processing fits image: {filename}  \n'
-    f.write(catalog_out)
-    incoming_dimensions = fitsinfo['naxis']
-    pixel_size = fitsinfo['ddec'] * 3600.0
-    if mean_beam:
-        LOGGER.info(f'Using user provided size: {mean_beam}')
-    elif fitsinfo['b_size']:
-        bmaj,bmin,_ = np.array(fitsinfo['b_size']) * 3600.0
-        mean_beam = 0.5 * (bmaj + bmin)
-    else:
-        raise('No beam information found. Specify mean beam in arcsec: --beam-size 5')
-    catalog_out = f'# mean beam size (arcsec): {round(mean_beam,2)} \n' 
-    f.write(catalog_out)
-    catalog_out = f'# original image peak flux (Jy/beam): {image_data.max()} \n'
-    f.write(catalog_out)
-    catalog_out = f'# noise out (µJy/beam): {round(noise*1000000,2)} \n'
-    f.write(catalog_out)
-    limiting_flux = noise * threshold_value
-    catalog_out = f'# limiting_flux (mJy/beam): {round(limiting_flux*1000,2)}  \n'
-    f.write(catalog_out)
-
-    contours = find_contours(mask_image, 0.5)
+    source_list = []
     # Start worker processes
-    if not num_processors:
+    if not ncpu:
         try:
             import multiprocessing
-            num_processors =  multiprocessing.cpu_count()
+            ncpu =  multiprocessing.cpu_count()
             LOGGER.info(f'Setting number of processors to {num_processors}')
         except:
             pass
@@ -458,17 +227,16 @@ def generate_source_list(filename, outfile, mask_image, threshold_value, noise, 
             for j in range(len(contour)):
                 x.append(contour[j][0])
                 y.append(contour[j][1])
-            TASKS.append((process_contour,(x,y, image_data, fitsinfo, limiting_flux, noise, mean_beam)))
+            TASKS.append((process_contour,(contour, image_data, fitsinfo, limiting_flux, noise, mean_beam)))
     task_queue = Queue()
     done_queue = Queue()
     # Submit tasks
     LOGGER.info('Submitting distributed tasks. This might take a while...')
     for task in TASKS:
         task_queue.put(task)
-    for i in range(num_processors):
+    for i in range(ncpu):
         Process(target=contour_worker, args=(task_queue, done_queue)).start()
 
-    source_list = []
     num_max = 0
     # Get the results from parallel processing
     for i in range(len(TASKS)):
@@ -481,18 +249,9 @@ def generate_source_list(filename, outfile, mask_image, threshold_value, noise, 
         task_queue.put('STOP')
 
     ra_sorted_list = sorted(source_list, key = itemgetter(0))
-    LOGGER.info(f'Number of sources detected {len(ra_sorted_list)}')
-    catalog_out = f'# number of sources detected {len(ra_sorted_list)} \n'
-    f.write(catalog_out)
-    catalog_out = f'# number of souces using peak for source position: {num_max} \n'
-    f.write(catalog_out)
-    catalog_out = '#\n#  source    ra_hms  dec_dms ra(deg)  dec(deg)    flux(mJy)  error ang_size_(arcsec)  pos_angle_(deg)\n'
-    f.write(catalog_out)
-    for i in range(len(ra_sorted_list)):
-       output = str(i) + ', ' + ra_sorted_list[i][1] + '\n'
-       f.write(output)
-    f.close()
-    return source_list
+
+    return ra_sorted_list
+
 
 def main():
     LOGGER.info("Welcome to breizorro")
@@ -729,7 +488,7 @@ def main():
         mask_image = input_image * new_mask_image
         LOGGER.info(f"Number of extended islands found: {len(extended_islands)}")
 
-    if args.outregion:
+    if args.outcatalog or args.outregion:
         contours = find_contours(mask_image, 0.5)
         polygon_regions = []
         for contour in contours:
@@ -741,21 +500,52 @@ def main():
             polygon_region = PolygonSkyRegion(vertices=contour_sky, meta={'label': 'Region'})
             # Add the polygon region to the list
             polygon_regions.append(polygon_region)
-        regions.Regions(polygon_regions).write(args.outregion, format='ds9')
         LOGGER.info(f"Number of regions found: {len(polygon_regions)}")
-        LOGGER.info(f"Saving regions in {args.outregion}")
+        if args.outregion:
+            regions.Regions(polygon_regions).write(args.outregion, format='ds9')
+            LOGGER.info(f"Saving regions in {args.outregion}")
 
-
-    if args.outcatalog:
-        num_proc = None # Assign based on the number of processors on a system
-        if args.ncpu:
-            num_proc = int(args.ncpu)
+    if args.outcatalog and args.imagename:
+        source_list = []
+        image_data, hdu_header = get_image(args.imagename)
+        fitsinfo = fitsInfo(args.imagename)
         mean_beam = None # Use beam info from the image header by default
         if args.beam:
             mean_beam = float(args.beam)
         noise = np.median(noise_image)
-        source_list = generate_source_list(args.imagename, args.outcatalog, mask_image,
-                                           threshold, noise, num_proc, mean_beam)
+        if mean_beam:
+            LOGGER.info(f'Using user provided size: {mean_beam}')
+        elif fitsinfo['b_size']:
+            bmaj,bmin,_ = np.array(fitsinfo['b_size']) * 3600.0
+            mean_beam = 0.5 * (bmaj + bmin)
+        else:
+            raise('No beam information found. Specify mean beam in arcsec: --beam-size 6.5')
+
+        f = open(args.outcatalog, 'w')
+        catalog_out = f'# processing fits image: {args.imagename}  \n'
+        f.write(catalog_out)
+        image_dimensions = fitsinfo['naxis']
+        pixel_size = fitsinfo['ddec'] * 3600.0
+        catalog_out = f'# mean beam size (arcsec): {round(mean_beam,2)} \n' 
+        f.write(catalog_out)
+        catalog_out = f'# original image peak flux (Jy/beam): {image_data.max()} \n'
+        f.write(catalog_out)
+        catalog_out = f'# noise out (µJy/beam): {round(noise*1000000,2)} \n'
+        f.write(catalog_out)
+        limiting_flux = noise * threshold
+        catalog_out = f'# limiting_flux (mJy/beam): {round(limiting_flux*1000,2)}  \n'
+        f.write(catalog_out)
+        source_list = multiprocess_contours(contours, args.ncpu)
+        catalog_out = f'# number of sources detected {len(source_list)} \n'
+        f.write(catalog_out)
+        catalog_out = f'# number of souces using peak for source position: {num_max} \n'
+        f.write(catalog_out)
+        catalog_out = '#\n#  source    ra_hms  dec_dms ra(deg)  dec(deg)    flux(mJy)  error ang_size_(arcsec)  pos_angle_(deg)\n'
+        f.write(catalog_out)
+        for i in range(len(source_list)):
+            output = str(i) + ', ' + source_list[i][1] + '\n'
+        f.write(output)
+        f.close()
         LOGGER.info(f'Source catalog saved: {args.outcatalog}')
 
     if args.gui:
@@ -796,15 +586,15 @@ def main():
         # Plot the image using degree coordinates
         p.image(image=[np.flip(mask_image, axis=1)], x=x_range[0], y=y_range[0], dw=extent, dh=extent, palette="Greys256", level="image")
 
-
-        # Extracting data from source_list
-        x_coords = [float(d[1].split(', ')[2]) for d in source_list]
-        y_coords = [float(d[1].split(', ')[3]) for d in source_list]
-        labels = [f"({d[1].split(', ')[0]}, {d[1].split(', ')[1]})" for d in source_list]
-        # Plotting points
-        p.circle(x_coords, y_coords, size=3, color="red", alpha=0.5)
-        for i, (x, y, label) in enumerate(zip(x_coords, y_coords, labels)):
-            p.add_layout(Label(x=x, y=y, text=label, text_baseline="middle", text_align="center", text_font_size="10pt"))
+        if args.outcatalog:
+            # Extracting data from source_list
+            x_coords = [float(d[1].split(', ')[2]) for d in source_list]
+            y_coords = [float(d[1].split(', ')[3]) for d in source_list]
+            labels = [f"({d[1].split(', ')[0]}, {d[1].split(', ')[1]})" for d in source_list]
+            # Plotting points
+            p.circle(x_coords, y_coords, size=3, color="red", alpha=0.5)
+            for i, (x, y, label) in enumerate(zip(x_coords, y_coords, labels)):
+                p.add_layout(Label(x=x, y=y, text=label, text_baseline="middle", text_align="center", text_font_size="10pt"))
         p.grid.grid_line_width = 0.5
         src1 = ColumnDataSource({'x': [], 'y': [], 'width': [], 'height': [], 'alpha': []})
         src2 = ColumnDataSource({'xs': [], 'ys': [], 'alpha': []})

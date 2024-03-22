@@ -31,7 +31,7 @@ from multiprocessing import Process, Queue
 from operator import itemgetter, attrgetter
 
 from breizorro.utils import get_source_size, format_source_coordinates 
-from breizorro.utils import fitsInfo 
+from breizorro.utils import fitsInfo, calculate_area
 
 
 def create_logger():
@@ -136,39 +136,40 @@ def remove_regions(mask_image, regs, wcs):
         mask_image[reg.to_mask().to_image(mask_image.shape) != 0] = 0
 
 
-def process_contour(contour, image_data, fitsinfo, flux_cutoff, noise_out, beam):
-
-    rr, cc = skimage_polygon(x,y)
-    data_result = image_data[rr, cc]
-    pixel_size = fitsinfo['ddec'] * 3600.0
-    if fitsinfo['b_size']:
-        bmaj,bmin,_ = np.array(fitsinfo['b_size']) * 3600.0
-        mean_beam = 0.5 * (bmaj + bmin)
-    else:
-        mean_beam = beam
-    pixels_beam = calculate_area(bmaj, bmin, pixel_size)
-    total_flux =  data_result.sum() / pixels_beam
-    print(total_flux)
-    contained_points = len(rr) # needed for estimating flux density error
+def process_contour(contour, image_data, fitsinfo, noise_out):
     use_max = 0
     lon = 0 
+    pix_size = fitsinfo['ddec'] * 3600.0
+    bmaj, bmin,_ = np.array(fitsinfo['b_size']) * 3600.0
+    mean_beam = 0.5 * (bmaj + bmin)
+    pix_beam = calculate_area(bmaj, bmin, pix_size)
     wcs = fitsinfo['wcs']
     while len(wcs.array_shape) > 2:
         wcs = wcs.dropaxis(len(wcs.array_shape) - 1)
+
+    contour_sky = wcs.pixel_to_world(contour[:, 1], contour[:, 0])
+    polygon_region = PolygonSkyRegion(vertices=contour_sky)
+    pix_region = polygon_region.to_pixel(wcs)
+    mask = pix_region.to_mask().to_image(image_data.shape[-2:])
     try:
-        peak_flux = data_result.max()
+        data = mask * image_data
+        nndata = np.flip(data, axis=0)
+        nndata = nndata[~np.isnan(nndata)]
+        total_flux = np.sum(nndata[nndata != -0.0])/pix_beam
+        peak_flux = data.max()/pix_beam
     except: 
         LOGGER.warn('Failure to get maximum within contour')
         LOGGER.info('Probably a contour at edge of image - skipping')
         peak_flux = 0.0
-    if peak_flux >= flux_cutoff:
+    if peak_flux:
         total_peak_ratio =  np.abs((total_flux - peak_flux) / total_flux)
-        beam_error = contained_points/pixels_beam  * noise_out 
-        ten_pc_error = 0.1 * total_flux
-        flux_density_error = np.sqrt(ten_pc_error * ten_pc_error + beam_error * beam_error)
-        contour = []
-        for i in range(len(x)):
-            contour.append([x[i],y[i]])
+        flux_density_error = 0.001
+        #beam_error = contained_points/pixels_beam  * noise_out
+        #ten_pc_error = 0.1 * total_flux
+        #flux_density_error = np.sqrt(ten_pc_error * ten_pc_error + beam_error * beam_error)
+        #contour = []
+        #for i in range(len(x)):
+        #    contour.append([x[i],y[i]])
         #centroid = calculate_weighted_centroid(x,y, data_result)
         #pix_centroid = PixCoord(centroid[0], centroid[1])
         #contour_pixels = PixCoord(np.array(x), np.array(y))
@@ -180,18 +181,17 @@ def process_contour(contour, image_data, fitsinfo, flux_cutoff, noise_out, beam)
         if True:
             use_max = 1
             LOGGER.warn('centroid lies outside polygon - using peak position')
-            location = np.unravel_index(np.argmax(data_result, axis=None), data_result.shape)
-            x_pos = rr[location]
-            y_pos = cc[location]
-            data_max = image_data[x_pos,y_pos] / pixels_beam
-            data_max = image_data[x_pos,y_pos]
-            pos_pixels = PixCoord(x_pos, y_pos)
+            location = np.unravel_index(np.argmax(data, axis=None), data.shape)
+            #x_pos = rr[location]
+            #y_pos = cc[location]
+            #data_max = image_data[x_pos,y_pos] / pixels_beam
+            #data_max = image_data[x_pos,y_pos]
+            pos_pixels = PixCoord(*location)
             ra, dec = wcs.all_pix2world(pos_pixels.x, pos_pixels.y, 0)
-            print(data_max)
-            print(f'{ra},{dec}')
+            ra, dec = float(ra), float(dec)
 
         source_flux = (round(total_flux * 1000, 3), round(flux_density_error * 1000, 4))
-        source_size = get_source_size(contour, pixel_size, mean_beam, image_data, total_peak_ratio)
+        source_size = get_source_size(contour, pix_size, mean_beam, image_data, total_peak_ratio)
         source_pos = format_source_coordinates(ra, dec)
         source = source_pos + (ra, dec) + (total_flux, flux_density_error) + source_size
         catalog_out = ', '.join(str(src_prop) for src_prop in source)
@@ -202,7 +202,7 @@ def process_contour(contour, image_data, fitsinfo, flux_cutoff, noise_out, beam)
     return (ra, catalog_out, use_max)
 
 
-def multiprocess_contour(contours, ncpu=None):
+def multiprocess_contours(contours, image_data, fitsinfo, mean_beam, ncpu=None):
 
     def contour_worker(input, output):
         for func, args in iter(input.get, 'STOP'):
@@ -215,7 +215,7 @@ def multiprocess_contour(contours, ncpu=None):
         try:
             import multiprocessing
             ncpu =  multiprocessing.cpu_count()
-            LOGGER.info(f'Setting number of processors to {num_processors}')
+            LOGGER.info(f'Setting number of processors to {ncpu}')
         except:
             pass
     TASKS = []
@@ -227,7 +227,7 @@ def multiprocess_contour(contours, ncpu=None):
             for j in range(len(contour)):
                 x.append(contour[j][0])
                 y.append(contour[j][1])
-            TASKS.append((process_contour,(contour, image_data, fitsinfo, limiting_flux, noise, mean_beam)))
+            TASKS.append((process_contour,(contour, image_data, fitsinfo, mean_beam)))
     task_queue = Queue()
     done_queue = Queue()
     # Submit tasks
@@ -245,7 +245,7 @@ def multiprocess_contour(contours, ncpu=None):
             source_list.append(catalog_out)
             num_max += catalog_out[2]
     # Tell child processes to stop
-    for i in range(num_processors):
+    for i in range(ncpu):
         task_queue.put('STOP')
 
     ra_sorted_list = sorted(source_list, key = itemgetter(0))
@@ -535,16 +535,16 @@ def main():
         limiting_flux = noise * threshold
         catalog_out = f'# limiting_flux (mJy/beam): {round(limiting_flux*1000,2)}  \n'
         f.write(catalog_out)
-        source_list = multiprocess_contours(contours, args.ncpu)
+        source_list = multiprocess_contours(contours, image_data, fitsinfo, mean_beam, args.ncpu)
         catalog_out = f'# number of sources detected {len(source_list)} \n'
         f.write(catalog_out)
-        catalog_out = f'# number of souces using peak for source position: {num_max} \n'
-        f.write(catalog_out)
-        catalog_out = '#\n#  source    ra_hms  dec_dms ra(deg)  dec(deg)    flux(mJy)  error ang_size_(arcsec)  pos_angle_(deg)\n'
+        #catalog_out = f'# number of souces using peak for source position: {num_max} \n'
+        #f.write(catalog_out)
+        catalog_out = '#\n#  source    ra_hms  dec_dms ra(deg)  dec(deg)    flux(mJy)  error ang_size(arcsec)  pos_angle(deg)\n'
         f.write(catalog_out)
         for i in range(len(source_list)):
             output = str(i) + ', ' + source_list[i][1] + '\n'
-        f.write(output)
+            f.write(output)
         f.close()
         LOGGER.info(f'Source catalog saved: {args.outcatalog}')
 

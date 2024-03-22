@@ -12,6 +12,8 @@ from astropy.wcs import WCS
 from astropy.coordinates import Angle
 from astropy.coordinates import SkyCoord
 
+from regions import PixCoord
+from regions import PolygonSkyRegion, PolygonPixelRegion
 
 def deg_to_hms(ra_deg):
     ra_hours = ra_deg / 15  # 360 degrees = 24 hours
@@ -90,7 +92,7 @@ def calculate_area(bmaj, bmin, pix_size):
     b_pixels = bmin / pix_size
 
     # Calculate the area of the ellipse using the formula: π * a * b
-    area = np.pi * a_pixels * b_pixels
+    area = a_pixels * b_pixels
 
     return area
 

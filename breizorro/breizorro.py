@@ -6,11 +6,15 @@ import argparse
 import os.path
 import re
 import numpy as np
+import traceback
 from astropy.io import fits
 from astropy.coordinates import SkyCoord
 from astropy.wcs import WCS
+from reproject import reproject_interp
+
 import regions
 from argparse import ArgumentParser
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
 from scipy.ndimage.measurements import label, find_objects
@@ -34,6 +38,7 @@ def create_logger():
     return log
 
 LOGGER = create_logger()
+NCPU = 1
 
 def get_image(fitsfile):
     """
@@ -71,10 +76,11 @@ def flush_fits(newimage, fitsfile, header=None):
     f.flush()
 
 
-def make_noise_map(restored_image, boxsize):
+def make_noise_map(restored_image, boxsize, quiet=False):
     # Cyril's magic minimum filter
     # Plundered from the depths of https://github.com/cyriltasse/DDFacet/blob/master/SkyModel/MakeMask.py
-    LOGGER.info("Generating noise map")
+    if not quiet:
+        LOGGER.info("Generating noise map")
     box = (boxsize, boxsize)
     n = boxsize**2.0
     x = numpy.linspace(-10, 10, 1000)
@@ -87,8 +93,167 @@ def make_noise_map(restored_image, boxsize):
     median_noise = numpy.median(noise)
     median_mask = noise < median_noise
     noise[median_mask] = median_noise
-    LOGGER.info(f"Median noise value is {median_noise}")
+    if not quiet:
+        LOGGER.info(f"Median noise value is {median_noise}")
     return noise
+
+def process_residual_cube(cubefile, baseline_image, baseline_flux_threshold,
+                          boxsize, threshold, reject_maskfile, reject_threshold, reject_dilate, maxplanes=None):
+
+    LOGGER.info(f"Loading residual cube {cubefile}")
+    basename = os.path.splitext(cubefile)[0]
+    ff = fits.open(cubefile, memmap=True)
+
+    cube = ff[0].data
+    header = ff[0].header
+
+    boost = baseline_flux_image = make_boost_cube = None
+    if baseline_image:
+        boost_cube = f"{basename}.boost.fits"
+        if os.path.exists(boost_cube):
+            LOGGER.info(f"Loading existing boost cube from {boost_cube}")
+            boost = fits.open(boost_cube, memmap=True)[0].data
+        else:
+            rff = fits.open(baseline_image)[0]
+            if rff.shape[-2:] != cube.shape[-2:]:
+                LOGGER.info(f"Reprojecting baseline image {baseline_image}")
+                
+                # form WCSs, dropping non-spatial axes
+                target_wcs = WCS(header).dropaxis(2)
+                rff_wcs = WCS(rff.header).dropaxis(3).dropaxis(2)
+                rff_data = rff.data[0, 0, :, :]
+
+                # Perform the reprojection
+                baseline_flux_image, _ = reproject_interp((rff.data[0,0,...], rff_wcs), target_wcs, shape_out=cube.shape[1:])
+
+                name = os.path.splitext(baseline_image)[0]
+                outname = f"{name}.reprojected.fits"
+                LOGGER.info(f"Saving reprojected baseline image to {outname}")
+                fits.PrimaryHDU(baseline_flux_image, header).writeto(outname, overwrite=True)
+            else:
+                LOGGER.info(f"Loading baseline image from {baseline_image}")
+                baseline_flux_image = rff.data
+            boost = np.zeros_like(cube, np.float32)
+            make_boost_cube = True
+
+    if reject_maskfile:
+        rff = fits.open(reject_maskfile)[0]
+        if rff.shape[-2:] != cube.shape[-2:]:
+            LOGGER.info(f"Reprojecting external rejection mask from {reject_maskfile}")
+            
+            # form WCSs, dropping non-spatial axes
+            target_wcs = WCS(header).dropaxis(2)
+            rff_wcs = WCS(rff.header).dropaxis(3).dropaxis(2)
+            rff_data = rff.data[0, 0, :, :]
+
+            # Perform the reprojection
+            reprojected_data, _ = reproject_interp((rff.data[0,0,...], rff_wcs), target_wcs, shape_out=cube.shape[1:])
+
+            reject_external_mask = (reprojected_data != 0)
+
+            name = os.path.splitext(reject_maskfile)[0]
+            outname = f"{name}.reprojected.fits"
+            LOGGER.info(f"Saving reprojected external rejection to {outname}")
+            fits.PrimaryHDU(reject_external_mask.astype(np.int8), header).writeto(outname, overwrite=True)
+        else:
+            LOGGER.info(f"Loading external rejection mask from {reject_maskfile}")
+            reject_external_mask = rff.data != 0
+
+    histogram_bins = np.arange(0, 31)
+    histogram = np.zeros(len(histogram_bins)-1, int)
+    max_sigma = 0
+
+    LOGGER.info(f"Processing mean cube (reject threshold {reject_threshold}, dilate {reject_dilate})")
+
+    nt, ny, nx = cube.shape
+
+    avgcube = cube.mean(0)
+    noise_image = make_noise_map(avgcube, boxsize)
+    reject_mask = avgcube > reject_threshold * noise_image
+
+    if reject_maskfile:
+        reject_mask |= reject_external_mask
+
+    if reject_dilate:
+        r = np.arange(-reject_dilate, reject_dilate+1)
+        struct = np.sqrt(r[:, np.newaxis]**2 + r[np.newaxis,:]**2) <= reject_dilate
+        reject_mask = binary_dilation(input=reject_mask, structure=struct)
+
+    LOGGER.info(f"Saving rejection mask")
+    fits.PrimaryHDU(reject_mask.astype(np.int8), header).writeto(f"{basename}.reject.fits", overwrite=True)
+
+    accept_mask = ~reject_mask
+    del reject_mask
+
+    detections = {}
+
+    def process_plane(i):
+        try:
+            # convert to sigmas
+            img = cube[i] / make_noise_map(cube[i], boxsize, quiet=True)
+            image_mask = accept_mask
+            # filter based on flux boost factor
+            if boost is not None:
+                if make_boost_cube:
+                    boost[i] = cube[i] / baseline_flux_image
+                    boost[i][baseline_flux_image < 2e-5] = 0
+                    boost[i][boost[i] < 0] = 0
+                image_mask = image_mask & ((boost[i] ==0 )|(boost[i] >= baseline_flux_threshold))
+            if i==0:
+                fits.PrimaryHDU(img, header).writeto(f"snr.{i}.fits", overwrite=True)
+                fits.PrimaryHDU(image_mask.astype(np.int8), header).writeto(f"mask.{i}.fits", overwrite=True)
+            # compute histogram of sigma values
+            hist, _ = np.histogram(img[image_mask], histogram_bins)
+            maxsig = img[image_mask].max()
+            # find stuff above threshold
+            image_mask = (img >= threshold) & image_mask
+            yy, xx = np.nonzero(image_mask)
+            if not len(xx):
+                return i, [], [], [], [], maxsig, hist
+            # LOGGER.info(f"Plane {i} max sigma is {maxsig}")
+            return i, xx, yy, \
+                    [img[y, x] for x, y in zip(xx, yy)], \
+                    [boost[i, y, x] for x, y in zip(xx, yy)] if boost is not None else [1]*len(xx), \
+                    maxsig, hist
+        except Exception as exc:
+            print(f"Error processing plane {i}")
+            traceback.print_exc()
+
+    with ThreadPoolExecutor(max_workers=NCPU) as pool:
+        if not maxplanes:
+            maxplanes = cube.shape[0]
+        futures = [pool.submit(process_plane, i) for i in range(maxplanes)] 
+        for f in as_completed(futures):
+            i, xx, yy, sigmas, boosts, maxsig, hist = f.result()
+            for x, y, sigma, b in zip(xx, yy, sigmas, boosts):
+                detections.setdefault((x,y),[]).append((i, sigma, b))
+            if len(xx) or not i%100:
+                LOGGER.info(f"Plane {i} had {len(xx)} detection(s)")
+            max_sigma = max(max_sigma, maxsig)
+            histogram[...] += hist
+
+    sorted_detections = sorted([len(tt), x, y, sorted(tt)] for (x,y), tt in detections.items())[::-1]
+    detection_mask = np.zeros_like(cube[0], np.int16)
+    for i, (n, x, y, tsb) in enumerate(sorted_detections):
+        dets = [f"{t}:{s:.1f}" for t, s, b in tsb]
+        maxsig = max([s for t, s, b in tsb])
+        print(tsb)
+        maxboost = max([b for t, s, b in tsb])
+        LOGGER.info(f"Detection {i} at {x},{y} with max sigma {maxsig:.1f} and max boost {maxboost:.2f}: {n} repeats")
+        xslice = slice(max(0, x-2), min(nx, x+2))
+        yslice = slice(max(0, y-2), min(ny, y+2))
+        detection_mask[yslice,xslice] = tsb[0][0]
+
+    fits.PrimaryHDU(detection_mask, header).writeto(f"{basename}.detection.fits", overwrite=True)
+    
+    print(f"Max sigma is {max_sigma}. Pixels per sigma bin:")
+    for bin, num in enumerate(histogram):
+        print(f"{histogram_bins[bin]}-{histogram_bins[bin+1]}: {num}") 
+
+    if make_boost_cube:
+        LOGGER.info(f"saving boost cube {boost_cube}")
+        fits.PrimaryHDU(boost, header).writeto(boost_cube, overwrite=True)
+
 
 def resolve_island(isl_spec, mask_image, wcs, ignore_missing=False):
     if re.match("^\d+$", isl_spec):
@@ -159,6 +324,21 @@ def main():
     parser.add_argument('--invert', action="store_true",
                          help='Invert the mask')
     
+    parser.add_argument('-c', '--cube', type=str, 
+                        help="Process residual cube instead of main image")
+    parser.add_argument('--max-cube-planes', dest='max_cube_planes', metavar='N', type=int, 
+                        help='Proecess only the first N cube planes. Useful for debugging.')
+    parser.add_argument('--reject-threshold', dest='reject_threshold', type=float, default=5,
+                        help='Rejection threshold for mean cube (default %(default)s)')
+    parser.add_argument('--reject-dilate', dest='reject_dilate', type=int, default=3,
+                        help='Dilate rejection mask by this value (default %(default)s)')
+    parser.add_argument('--reject-boxsize', dest='reject_boxsize', type=int, default=50,
+                        help='Box size for rejection mask')
+    parser.add_argument('--reject-mask', dest='reject_mask', type=str,
+                        help='Additional rejection mask')
+    parser.add_argument('--baseline-flux-threshold', metavar="FACTOR", dest='baseline_flux_threshold', type=float,
+                        help='Reject if flux excursion is below baseline restored image times this factor')
+
     parser.add_argument('--dilate', dest='dilate', metavar="R", type=int, default=0,
                         help='Apply dilation with a radius of R pixels')
     parser.add_argument('--fill-holes', dest='fill_holes', action='store_true', 
@@ -173,21 +353,39 @@ def main():
 
     parser.add_argument('--gui', dest='gui', action='store_true', default=False,
                          help='Open mask in gui.')
+    
+    parser.add_argument('-j', '--ncpu', dest='ncpu', default=1, type=int, 
+                         help='Number of CPUs to use, for operations that support parallelism.')
+
     args = parser.parse_args()
     threshold = float(args.threshold)
     boxsize = int(args.boxsize)
     dilate = int(args.dilate)
     savenoise = args.savenoise
     outfile = args.outfile
+    global NCPU
+    NCPU = args.ncpu
 
     if args.imagename and args.maskname:
         parser.error("Either --restored-image or --mask-image must be specified, but not both")
 
     # define input file, and get its name and extension
-    input_file = args.imagename or args.maskname
+    input_file = args.imagename or args.maskname or args.cube
 #    name, ext = os.path.split(input_file)
     name = '.'.join(input_file.split('.')[:-1])
     ext = input_file.split('.')[-1]
+
+
+    if args.cube:
+        mask_image = process_residual_cube(args.cube,
+                                           boxsize=boxsize, threshold=threshold, 
+                                           baseline_image=args.imagename,
+                                           baseline_flux_threshold=args.baseline_flux_threshold,
+                                           reject_maskfile=args.reject_mask,
+                                           reject_threshold=args.reject_threshold, 
+                                           reject_dilate=args.reject_dilate,
+                                           maxplanes=args.max_cube_planes)
+        sys.exit(0)
 
     # first, load or generate mask
 
@@ -228,25 +426,25 @@ def main():
 
     # next, merge and/or subtract
     def load_fits_or_region(filename):
-        fits = regs = None
+        ff = regs = None
         # read as FITS or region
         try:
-            fits = get_image(filename)
+            ff = get_image(filename)
         except OSError:
             try:
                 regs = regions.Regions.read(filename)
             except:
                 LOGGER.error(f"{merge} is neither a FITS file not a regions file")
                 raise
-        return fits, regs
+        return ff, regs
 
 
     if args.merge:
         for merge in args.merge:
-            fits, regs = load_fits_or_region(merge)
-            if fits:
+            ff, regs = load_fits_or_region(merge)
+            if ff:
                 LOGGER.info(f"Treating {merge} as a FITS mask")
-                mask_image += fits[0]
+                mask_image += ff[0]
                 LOGGER.info("Merged into mask")
             else:
                 LOGGER.info(f"Merging in {len(regs)} regions from {merge}")
@@ -256,10 +454,10 @@ def main():
 
     if args.subtract:
         for subtract in args.subtract:
-            fits, regs = load_fits_or_region(subtract)
+            ff, regs = load_fits_or_region(subtract)
             if fits:
                 LOGGER.info(f"treating {subtract} as a FITS mask")
-                mask_image[fits[0] != 0] = 0
+                mask_image[ff[0] != 0] = 0
                 LOGGER.info("Subtracted from mask")
             else:
                 LOGGER.info(f"Subtracting {len(regs)} regions from {subtract}")

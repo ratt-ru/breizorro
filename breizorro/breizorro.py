@@ -18,6 +18,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
 from scipy.ndimage.measurements import label, find_objects
+from scipy.ndimage import maximum_filter
 import scipy.special
 import scipy.ndimage
 
@@ -98,7 +99,10 @@ def make_noise_map(restored_image, boxsize, quiet=False):
     return noise
 
 def process_residual_cube(cubefile, baseline_image, baseline_flux_threshold,
-                          boxsize, threshold, reject_maskfile, reject_threshold, reject_dilate, maxplanes=None):
+                          boxsize, threshold, reject_maskfile, reject_threshold, 
+                          reject_dilate,
+                          max_filter_size=8, 
+                          maxplanes=None):
 
     LOGGER.info(f"Loading residual cube {cubefile}")
     basename = os.path.splitext(cubefile)[0]
@@ -115,6 +119,7 @@ def process_residual_cube(cubefile, baseline_image, baseline_flux_threshold,
             boost = fits.open(boost_cube, memmap=True)[0].data
         else:
             rff = fits.open(baseline_image)[0]
+            name = os.path.splitext(baseline_image)[0]
             if rff.shape[-2:] != cube.shape[-2:]:
                 LOGGER.info(f"Reprojecting baseline image {baseline_image}")
                 
@@ -126,13 +131,19 @@ def process_residual_cube(cubefile, baseline_image, baseline_flux_threshold,
                 # Perform the reprojection
                 baseline_flux_image, _ = reproject_interp((rff.data[0,0,...], rff_wcs), target_wcs, shape_out=cube.shape[1:])
 
-                name = os.path.splitext(baseline_image)[0]
                 outname = f"{name}.reprojected.fits"
                 LOGGER.info(f"Saving reprojected baseline image to {outname}")
                 fits.PrimaryHDU(baseline_flux_image, header).writeto(outname, overwrite=True)
             else:
                 LOGGER.info(f"Loading baseline image from {baseline_image}")
                 baseline_flux_image = rff.data
+            if max_filter_size:
+                LOGGER.info("applying max filter")
+                baseline_flux_image = maximum_filter(baseline_flux_image, 
+                                                        size=(max_filter_size, max_filter_size), mode='constant')
+                outname = f"{name}.baselineflux.fits"
+                LOGGER.info(f"saving baseline flux image {outname}")
+                fits.PrimaryHDU(baseline_flux_image, header).writeto(outname, overwrite=True)
             boost = np.zeros_like(cube, np.float32)
             make_boost_cube = True
 
@@ -159,7 +170,8 @@ def process_residual_cube(cubefile, baseline_image, baseline_flux_threshold,
             LOGGER.info(f"Loading external rejection mask from {reject_maskfile}")
             reject_external_mask = rff.data != 0
 
-    histogram_bins = np.arange(0, 31)
+    max_sigma_bin = 200
+    histogram_bins = np.arange(0, max_sigma_bin+1)
     histogram = np.zeros(len(histogram_bins)-1, int)
     max_sigma = 0
 
@@ -189,16 +201,17 @@ def process_residual_cube(cubefile, baseline_image, baseline_flux_threshold,
 
     def process_plane(i):
         try:
-            # convert to sigmas
-            img = cube[i] / make_noise_map(cube[i], boxsize, quiet=True)
             image_mask = accept_mask
-            # filter based on flux boost factor
             if boost is not None:
+                # make the boost factor cube if needed
                 if make_boost_cube:
                     boost[i] = cube[i] / baseline_flux_image
                     boost[i][baseline_flux_image < 2e-5] = 0
-                    boost[i][boost[i] < 0] = 0
-                image_mask = image_mask & ((boost[i] ==0 )|(boost[i] >= baseline_flux_threshold))
+                # filter based on flux boost factor
+                image_mask = image_mask & ((boost[i] == 0) | (boost[i] >= baseline_flux_threshold))
+            # convert cube to sigmas
+            cube[i] /= make_noise_map(cube[i], boxsize, quiet=True)
+            img = cube[i]
             if i==0:
                 fits.PrimaryHDU(img, header).writeto(f"snr.{i}.fits", overwrite=True)
                 fits.PrimaryHDU(image_mask.astype(np.int8), header).writeto(f"mask.{i}.fits", overwrite=True)
@@ -206,7 +219,8 @@ def process_residual_cube(cubefile, baseline_image, baseline_flux_threshold,
             hist, _ = np.histogram(img[image_mask], histogram_bins)
             maxsig = img[image_mask].max()
             # find stuff above threshold
-            image_mask = (img >= threshold) & image_mask
+            img[~image_mask] = 0
+            image_mask = (img >= threshold)
             yy, xx = np.nonzero(image_mask)
             if not len(xx):
                 return i, [], [], [], [], maxsig, hist
@@ -232,6 +246,10 @@ def process_residual_cube(cubefile, baseline_image, baseline_flux_threshold,
             max_sigma = max(max_sigma, maxsig)
             histogram[...] += hist
 
+    LOGGER.info("saving sigma cube")
+    fits.PrimaryHDU(cube, header).writeto(f"{basename}.sigma.fits", overwrite=True)
+
+    LOGGER.info("saving detections")
     sorted_detections = sorted([len(tt), x, y, sorted(tt)] for (x,y), tt in detections.items())[::-1]
     detection_mask = np.zeros_like(cube[0], np.int16)
     for i, (n, x, y, tsb) in enumerate(sorted_detections):
@@ -247,7 +265,8 @@ def process_residual_cube(cubefile, baseline_image, baseline_flux_threshold,
     fits.PrimaryHDU(detection_mask, header).writeto(f"{basename}.detection.fits", overwrite=True)
     
     print(f"Max sigma is {max_sigma}. Pixels per sigma bin:")
-    for bin, num in enumerate(histogram):
+    maxbin = int(max_sigma) + 2
+    for bin, num in enumerate(histogram[:maxbin]):
         print(f"{histogram_bins[bin]}-{histogram_bins[bin+1]}: {num}") 
 
     if make_boost_cube:
@@ -336,6 +355,8 @@ def main():
                         help='Box size for rejection mask')
     parser.add_argument('--reject-mask', dest='reject_mask', type=str,
                         help='Additional rejection mask')
+    parser.add_argument('--max-filter-size', type=int, default=8,
+                        help='Dilate baseline flux image by this max-filter (default %(default)s)')
     parser.add_argument('--baseline-flux-threshold', metavar="FACTOR", dest='baseline_flux_threshold', type=float,
                         help='Reject if flux excursion is below baseline restored image times this factor')
 
@@ -384,6 +405,7 @@ def main():
                                            reject_maskfile=args.reject_mask,
                                            reject_threshold=args.reject_threshold, 
                                            reject_dilate=args.reject_dilate,
+                                           max_filter_size=args.max_filter_size,
                                            maxplanes=args.max_cube_planes)
         sys.exit(0)
 

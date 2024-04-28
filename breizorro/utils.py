@@ -73,6 +73,49 @@ def format_source_coordinates(coord_ra_deg, coord_dec_deg):
     src_pos = (h_m_s,  d_m_s)
     return src_pos
 
+def deg2dec(dec_deg, deci=2):
+    """Converts declination in degrees to dms coordinates
+
+    Parameters
+    ----------
+    dec_deg : float
+      Declination in degrees
+    dec: int
+      Decimal places in float format
+
+    Returns
+    -------
+    dms : str
+      Declination in degrees:arcmin:arcsec format
+    """
+    DD          = int(dec_deg)
+    dec_deg_abs = np.abs(dec_deg)
+    DD_abs      = np.abs(DD)
+    MM          = int((dec_deg_abs - DD_abs)*60)
+    SS          = round((((dec_deg_abs - DD_abs)*60)-MM), deci)
+    return "%s:%s:%s"%(DD,MM,SS)
+
+
+def deg2ra(ra_deg, deci=2):
+    """Converts right ascension in hms coordinates to degrees
+
+    Parameters
+    ----------
+    ra_deg : float
+    ra in degrees format
+
+    Returns
+    -------
+    HH:MM:SS : str
+
+    """
+    if ra_deg < 0:
+       ra_deg = 360 + ra_deg
+    HH     = int((ra_deg*24)/360.)
+    MM     = int((((ra_deg*24)/360.)-HH)*60)
+    SS     = round(((((((ra_deg*24)/360.)-HH)*60)-MM)*60), deci)
+    return "%s:%s:%s"%(HH,MM,SS)
+
 
 def calculate_area(bmaj, bmin, pix_size):
     """
@@ -80,8 +123,8 @@ def calculate_area(bmaj, bmin, pix_size):
     given the pixel size.
 
     Parameters:
-        bmaj (float): Major axis of the ellipse in arcseconds.
-        bmin (float): Minor axis of the ellipse in arcseconds.
+        bmaj (float): Major axis raduis of the ellipse in arcseconds.
+        bmin (float): Minor axis radius of the ellipse in arcseconds.
         pix_size (float): Pixel size in arcseconds.
 
     Returns:
@@ -92,7 +135,7 @@ def calculate_area(bmaj, bmin, pix_size):
     b_pixels = bmin / pix_size
 
     # Calculate the area of the ellipse using the formula: π * a * b
-    area = a_pixels * b_pixels
+    area = np.pi * a_pixels * b_pixels
 
     return area
 
@@ -220,11 +263,11 @@ def calculate_beam_area(bmaj, bmin, pix_size):
         area (float): Calculated area of the ellipse in square pixels.
     """
     # Calculate the semi-major and semi-minor axes in pixels
-    a_pixels = b_major / pixel_size
-    b_pixels = b_minor / pixel_size
+    a_pixels = bmaj / pix_size
+    b_pixels = bmin / pix_size
 
     # Calculate the area of the ellipse using the formula: π * a * b
-    area = np.pi * a_pixels * b_pixels
+    area = np.pi * a_pixels * b_pixels 
 
     return area
 

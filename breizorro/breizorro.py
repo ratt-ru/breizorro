@@ -30,8 +30,8 @@ from multiprocessing import Process, Queue
 
 from operator import itemgetter, attrgetter
 
-from breizorro.utils import get_source_size, format_source_coordinates 
-from breizorro.utils import fitsInfo, calculate_area
+from breizorro.utils import get_source_size, format_source_coordinates, deg2ra, deg2dec
+from breizorro.utils import fitsInfo, calculate_beam_area
 
 
 def create_logger():
@@ -142,7 +142,7 @@ def process_contour(contour, image_data, fitsinfo, noise_out):
     pix_size = fitsinfo['ddec'] * 3600.0
     bmaj, bmin,_ = np.array(fitsinfo['b_size']) * 3600.0
     mean_beam = 0.5 * (bmaj + bmin)
-    pix_beam = calculate_area(bmaj, bmin, pix_size)
+    pix_beam = calculate_beam_area(bmaj/2, bmin/2, pix_size)
     wcs = fitsinfo['wcs']
     while len(wcs.array_shape) > 2:
         wcs = wcs.dropaxis(len(wcs.array_shape) - 1)
@@ -153,15 +153,15 @@ def process_contour(contour, image_data, fitsinfo, noise_out):
     mask = pix_region.to_mask().to_image(image_data.shape[-2:])
     try:
         data = mask * image_data
-        nndata = np.flip(data, axis=0)
-        nndata = nndata[~np.isnan(nndata)]
+        nndata = data # np.flip(data, axis=0)
+        #nndata = nndata[~np.isnan(nndata)]
         total_flux = np.sum(nndata[nndata != -0.0])/pix_beam
-        peak_flux = data.max()/pix_beam
+        peak_flux = nndata.max()/pix_beam
     except: 
         LOGGER.warn('Failure to get maximum within contour')
         LOGGER.info('Probably a contour at edge of image - skipping')
         peak_flux = 0.0
-    if peak_flux:
+    if total_flux:
         total_peak_ratio =  np.abs((total_flux - peak_flux) / total_flux)
         flux_density_error = 0.001
         #beam_error = contained_points/pixels_beam  * noise_out
@@ -181,7 +181,9 @@ def process_contour(contour, image_data, fitsinfo, noise_out):
         if True:
             use_max = 1
             LOGGER.warn('centroid lies outside polygon - using peak position')
-            location = np.unravel_index(np.argmax(data, axis=None), data.shape)
+            location = list(np.unravel_index(np.argmax(nndata, axis=None), data.shape))
+            location.reverse()
+            print(location)
             #x_pos = rr[location]
             #y_pos = cc[location]
             #data_max = image_data[x_pos,y_pos] / pixels_beam
@@ -189,11 +191,14 @@ def process_contour(contour, image_data, fitsinfo, noise_out):
             pos_pixels = PixCoord(*location)
             ra, dec = wcs.all_pix2world(pos_pixels.x, pos_pixels.y, 0)
             ra, dec = float(ra), float(dec)
+            #import IPython; IPython.embed()
 
         source_flux = (round(total_flux * 1000, 3), round(flux_density_error * 1000, 4))
         source_size = get_source_size(contour, pix_size, mean_beam, image_data, total_peak_ratio)
         source_pos = format_source_coordinates(ra, dec)
-        source = source_pos + (ra, dec) + (total_flux, flux_density_error) + source_size
+        print(source_pos)
+        print(total_flux)
+        source = source_pos + (ra, dec) + source_flux + source_size
         catalog_out = ', '.join(str(src_prop) for src_prop in source)
     else:
         # Dummy source to be eliminated
@@ -219,6 +224,7 @@ def multiprocess_contours(contours, image_data, fitsinfo, mean_beam, ncpu=None):
         except:
             pass
     TASKS = []
+    #import IPython; IPython.embed()
     for i in range(len(contours)):
         contour = contours[i]
         if len(contour) > 2:
@@ -533,10 +539,10 @@ def main():
         catalog_out = f'# noise out (µJy/beam): {round(noise*1000000,2)} \n'
         f.write(catalog_out)
         limiting_flux = noise * threshold
-        catalog_out = f'# limiting_flux (mJy/beam): {round(limiting_flux*1000,2)}  \n'
+        catalog_out = f'# cutt-off flux  (mJy/beam): {round(limiting_flux*1000,2)} \n'
         f.write(catalog_out)
         source_list = multiprocess_contours(contours, image_data, fitsinfo, mean_beam, args.ncpu)
-        catalog_out = f'# number of sources detected {len(source_list)} \n'
+        catalog_out = f'# number of sources detected: {len(source_list)} \n'
         f.write(catalog_out)
         #catalog_out = f'# number of souces using peak for source position: {num_max} \n'
         #f.write(catalog_out)
@@ -578,7 +584,8 @@ def main():
 
         # Define the plot
         p = figure(tooltips=[("x", "$x"), ("y", "$y"), ("value", "@image")], y_range=y_range)
-        p.x_range.range_padding = 0
+        #p.x_range.range_padding = 0
+        #p.y_range.range_padding = 0
         p.x_range.flipped = True
         p.title.text = out_mask_fits
 
@@ -606,7 +613,7 @@ def main():
         p.add_tools(draw_tool2)
         p.toolbar.active_drag = draw_tool1
         output_file("breizorro.html", title="Mask Editor")
-        export_png(p, filename="breizorro.png")
+        export_png(p, filename="breizorro1.png")
         show(p)
 
     LOGGER.info(f"Enforcing that mask to binary")

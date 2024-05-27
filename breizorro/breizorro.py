@@ -140,7 +140,11 @@ def contour_worker(input, output):
 
 def calculate_weighted_centroid(x, y, flux_values):
     # Calculate the total flux within the region
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    flux_values = np.asarray(flux_values, dtype=float)
     total_flux = np.sum(flux_values)
+    #total_flux =  flux_values.sum() / pixels_beam
     # Initialize variables for weighted sums
     weighted_sum_x = 0
     weighted_sum_y = 0
@@ -152,12 +156,11 @@ def calculate_weighted_centroid(x, y, flux_values):
     # Calculate the centroid coordinates
     centroid_x = weighted_sum_x / total_flux
     centroid_y = weighted_sum_y / total_flux
-    return centroid_x, centroid_y
+    return centroid_y, centroid_x
 
 
-def process_contour(x, y, image_data, fitsinfo, flux_cutoff, noise_out, beam):
-    rr, cc = skimage_polygon(x,y)
-    data_result = image_data[rr, cc]
+def process_contour(contour, image_data, fitsinfo, flux_cutoff, noise_out, beam):
+    # Get beam info
     pixel_size = fitsinfo['ddec'] * 3600.0
     if fitsinfo['b_size']:
         bmaj,bmin,_ = np.array(fitsinfo['b_size']) * 3600.0
@@ -165,16 +168,28 @@ def process_contour(x, y, image_data, fitsinfo, flux_cutoff, noise_out, beam):
     else:
         mean_beam = beam
     pixels_beam = calculate_area(bmaj, bmin, pixel_size)
-    total_flux =  data_result.sum() / pixels_beam
-    print(total_flux)
-    contained_points = len(rr) # needed for estimating flux density error
-    use_max = 0
-    lon = 0 
+    # Reference coordinate system
     wcs = fitsinfo['wcs']
     while len(wcs.array_shape) > 2:
         wcs = wcs.dropaxis(len(wcs.array_shape) - 1)
+    # Make region mask
+    contour_pixels = contour
+    contour_sky = wcs.pixel_to_world(contour_pixels[:, 1], contour_pixels[:, 0])
+    poly_reg = PolygonSkyRegion(vertices=contour_sky)
+    mask_image = image_data.copy()
+    mask_image.fill(0)
+    if hasattr(poly_reg, 'to_pixel'):
+        poly_reg = poly_reg.to_pixel(wcs)
+    mask_image += poly_reg.to_mask().to_image(mask_image.shape)
+    # Get data withing region
+    data_result = image_data * mask_image
+    total_flux =  data_result.sum() / pixels_beam
+    print(total_flux)
+    contained_points = len(poly_reg.vertices.y) #len(rr) # needed for estimating flux density error
+    use_max = 0
     try:
         peak_flux = data_result.max()
+        print(f"peak:{peak_flux}")
     except: 
         LOGGER.warn('Failure to get maximum within contour')
         LOGGER.info('Probably a contour at edge of image - skipping')
@@ -184,29 +199,29 @@ def process_contour(x, y, image_data, fitsinfo, flux_cutoff, noise_out, beam):
         beam_error = contained_points/pixels_beam  * noise_out 
         ten_pc_error = 0.1 * total_flux
         flux_density_error = np.sqrt(ten_pc_error * ten_pc_error + beam_error * beam_error)
-        contour = []
-        for i in range(len(x)):
-            contour.append([x[i],y[i]])
-        #centroid = calculate_weighted_centroid(x,y, data_result)
-        #pix_centroid = PixCoord(centroid[0], centroid[1])
-        #contour_pixels = PixCoord(np.array(x), np.array(y))
-        #p = PolygonPixelRegion(vertices=contour_pixels, meta={'label': 'Region'})
-        #ra, dec = wcs.all_pix2world(pix_centroid.x, pix_centroid.y,0)
-        #if p.contains(pix_centroid)[0]:
-        #    ra, dec = wcs.all_pix2world(pix_centroid.x, pix_centroid.y,0)
-        #else:
-        if True:
-            use_max = 1
-            LOGGER.warn('centroid lies outside polygon - using peak position')
+
+        from photutils import centroids
+        # Calculate weighted centroid
+        centroid_x, centroid_y = centroids.centroid_2dg(data_result)
+        print(centroid_x, centroid_y)
+
+        # Check if centroid lies within the polygon
+        pix_centroid = PixCoord(centroid_x, centroid_y)
+        p = PolygonPixelRegion(vertices=poly_reg.vertices, meta={"label": "Region"})
+
+        print(f"do you have this: {centroid_x},{centroid_y}")
+        #ra, dec = wcs.all_pix2world(centroid_x, centroid_y, 0)
+        if p.contains(pix_centroid)[0]:
+            # Use centroid for RA and Dec
+            ra, dec = wcs.all_pix2world(centroid_x, centroid_y, 0)
+            print(ra,dec)
+        else:
+            # Fallback to peak position if outside polygon
+            LOGGER.warn("centroid lies outside polygon - using peak position")
             location = np.unravel_index(np.argmax(data_result, axis=None), data_result.shape)
-            x_pos = rr[location]
-            y_pos = cc[location]
-            data_max = image_data[x_pos,y_pos] / pixels_beam
-            data_max = image_data[x_pos,y_pos]
-            pos_pixels = PixCoord(x_pos, y_pos)
-            ra, dec = wcs.all_pix2world(pos_pixels.x, pos_pixels.y, 0)
-            print(data_max)
-            print(f'{ra},{dec}')
+            pos_pixels = PixCoord(*location)
+            ra, dec = wcs.all_pix2world(pos_pixels.y, pos_pixels.x, 0)
+            print(ra,dec)
 
         source_flux = (round(total_flux * 1000, 3), round(flux_density_error * 1000, 4))
         source_size = get_source_size(contour, pixel_size, mean_beam, image_data, total_peak_ratio)
@@ -215,7 +230,7 @@ def process_contour(x, y, image_data, fitsinfo, flux_cutoff, noise_out, beam):
         catalog_out = ', '.join(str(src_prop) for src_prop in source)
     else:
         # Dummy source to be eliminated
-        lon = -np.inf 
+        ra = -np.inf
         catalog_out = ''
     return (ra, catalog_out, use_max)
 
@@ -280,7 +295,7 @@ def maxDist(contour, pixel_size):
 
     Parameters:
     contour : list of [x, y] pairs
-        List of coordinates defining the contour.
+       List of coordinates defining the contour.
     pixel_size : float
         Size of a pixel in the image (e.g., arcseconds per pixel).
 
@@ -410,7 +425,7 @@ def calculate_area(b_major, b_minor, pixel_size):
     b_pixels = b_minor / pixel_size
     
     # Calculate the area of the ellipse using the formula: π * a * b
-    area = np.pi * a_pixels * b_pixels
+    area = 2 * np.pi * a_pixels * b_pixels
     
     return area
 
@@ -419,7 +434,7 @@ def generate_source_list(filename, outfile, mask_image, threshold_value, noise, 
     image_data, hdu_header = get_image(filename)
     fitsinfo = fitsInfo(filename)
     f = open(outfile, 'w')
-    catalog_out = f'# processing fits image: {filename}  \n'
+    catalog_out = f'# Processed fits image: {filename}  \n'
     f.write(catalog_out)
     incoming_dimensions = fitsinfo['naxis']
     pixel_size = fitsinfo['ddec'] * 3600.0
@@ -453,12 +468,7 @@ def generate_source_list(filename, outfile, mask_image, threshold_value, noise, 
     for i in range(len(contours)):
         contour = contours[i]
         if len(contour) > 2:
-            x = []
-            y = []
-            for j in range(len(contour)):
-                x.append(contour[j][0])
-                y.append(contour[j][1])
-            TASKS.append((process_contour,(x,y, image_data, fitsinfo, limiting_flux, noise, mean_beam)))
+            TASKS.append((process_contour,(contour, image_data, fitsinfo, limiting_flux, noise, mean_beam)))
     task_queue = Queue()
     done_queue = Queue()
     # Submit tasks
@@ -712,6 +722,7 @@ def main():
         # This is useful to allow source finder to detect mainly point-like sources for cross-matching purposes only.
         LOGGER.info(f"Including only flux islands with a sum-peak ratio below: {args.sum_peak}")
         extended_islands = []
+        from scipy.ndimage.measurements import label, find_objects
         mask_image_label, num_features = label(mask_image)
         island_objects = find_objects(mask_image_label.astype(int))
         for island in island_objects:

@@ -30,6 +30,8 @@ from multiprocessing import Process, Queue
 
 from operator import itemgetter, attrgetter
 
+from photutils import centroids
+
 def create_logger():
     """Create a console logger"""
     log = logging.getLogger(__name__)
@@ -138,27 +140,6 @@ def contour_worker(input, output):
         output.put(result)
 
 
-def calculate_weighted_centroid(x, y, flux_values):
-    # Calculate the total flux within the region
-    x = np.asarray(x, dtype=float)
-    y = np.asarray(y, dtype=float)
-    flux_values = np.asarray(flux_values, dtype=float)
-    total_flux = np.sum(flux_values)
-    #total_flux =  flux_values.sum() / pixels_beam
-    # Initialize variables for weighted sums
-    weighted_sum_x = 0
-    weighted_sum_y = 0
-    # Loop through all pixels within the region
-    for xi, yi, flux in zip(x, y, flux_values):
-        # Add the weighted contribution of each pixel to the centroid
-        weighted_sum_x += xi * flux
-        weighted_sum_y += yi * flux
-    # Calculate the centroid coordinates
-    centroid_x = weighted_sum_x / total_flux
-    centroid_y = weighted_sum_y / total_flux
-    return centroid_y, centroid_x
-
-
 def process_contour(contour, image_data, fitsinfo, flux_cutoff, noise_out, beam):
     # Get beam info
     pixel_size = fitsinfo['ddec'] * 3600.0
@@ -184,12 +165,11 @@ def process_contour(contour, image_data, fitsinfo, flux_cutoff, noise_out, beam)
     # Get data withing region
     data_result = image_data * mask_image
     total_flux =  data_result.sum() / pixels_beam
-    print(total_flux)
     contained_points = len(poly_reg.vertices.y) #len(rr) # needed for estimating flux density error
     use_max = 0
     try:
         peak_flux = data_result.max()
-        print(f"peak:{peak_flux}")
+        LOGGER.info(f"Peak flux of {peak_flux} Jy/beam detected.")
     except: 
         LOGGER.warn('Failure to get maximum within contour')
         LOGGER.info('Probably a contour at edge of image - skipping')
@@ -199,31 +179,22 @@ def process_contour(contour, image_data, fitsinfo, flux_cutoff, noise_out, beam)
         beam_error = contained_points/pixels_beam  * noise_out 
         ten_pc_error = 0.1 * total_flux
         flux_density_error = np.sqrt(ten_pc_error * ten_pc_error + beam_error * beam_error)
-
-        from photutils import centroids
         # Calculate weighted centroid
         centroid_x, centroid_y = centroids.centroid_2dg(data_result)
-        print(centroid_x, centroid_y)
-
         # Check if centroid lies within the polygon
         pix_centroid = PixCoord(centroid_x, centroid_y)
         p = PolygonPixelRegion(vertices=poly_reg.vertices, meta={"label": "Region"})
-
-        print(f"do you have this: {centroid_x},{centroid_y}")
-        #ra, dec = wcs.all_pix2world(centroid_x, centroid_y, 0)
         if p.contains(pix_centroid)[0]:
             # Use centroid for RA and Dec
             ra, dec = wcs.all_pix2world(centroid_x, centroid_y, 0)
-            print(ra,dec)
         else:
             # Fallback to peak position if outside polygon
             LOGGER.warn("centroid lies outside polygon - using peak position")
             location = np.unravel_index(np.argmax(data_result, axis=None), data_result.shape)
             pos_pixels = PixCoord(*location)
             ra, dec = wcs.all_pix2world(pos_pixels.y, pos_pixels.x, 0)
-            print(ra,dec)
 
-        source_flux = (round(total_flux * 1000, 3), round(flux_density_error * 1000, 4))
+        #source_flux = (round(total_flux * 1000, 3), round(flux_density_error * 1000, 4))
         source_size = get_source_size(contour, pixel_size, mean_beam, image_data, total_peak_ratio)
         source_pos = format_source_coordinates(ra, dec)
         source = source_pos + (ra, dec) + (total_flux, flux_density_error) + source_size
@@ -344,7 +315,7 @@ def get_source_size(contour, pixel_size, mean_beam, image, int_peak_ratio):
         point_source = True
     if point_source:
         src_size = (0.0, 0.0)
-        print(f"Point source because {int_peak_ratio} <= 0.2 and {src_angle} <= {mean_beam}")
+        LOGGER.info(f"Point source because {int_peak_ratio} <= 0.2 or {src_angle} <= {mean_beam}")
     else:
         ang = round(src_angle,2)
         pa = round(pos_angle,2)
@@ -421,13 +392,22 @@ def calculate_area(b_major, b_minor, pixel_size):
         float: Calculated area of the ellipse in square pixels.
     """
     # Calculate the semi-major and semi-minor axes in pixels
-    a_pixels = b_major / pixel_size
-    b_pixels = b_minor / pixel_size
+    #a_pixels = b_major / pixel_size
+    #b_pixels = b_minor / pixel_size
     
-    # Calculate the area of the ellipse using the formula: π * a * b
-    area = 2 * np.pi * a_pixels * b_pixels
+    # Calculate the area of the ellipse using the formula: 2π * a * b
+    #area = 2 * np.pi * a_pixels * b_pixels
+      # Beam area in arcseconds^2
+    bmaj, bmin = b_major, b_minor
+    beam_area_arcsec2 = (np.pi * bmin * bmaj) / (4 * np.log(2))
     
-    return area
+    # Pixel area in arcseconds^2
+    pixel_area_arcsec2 = pixel_size ** 2
+    
+    # Beam area in pixels
+    area_pixels = beam_area_arcsec2 / pixel_area_arcsec2
+
+    return area_pixels
 
 
 def generate_source_list(filename, outfile, mask_image, threshold_value, noise, num_processors, mean_beam):
@@ -452,8 +432,8 @@ def generate_source_list(filename, outfile, mask_image, threshold_value, noise, 
     catalog_out = f'# noise out (µJy/beam): {round(noise*1000000,2)} \n'
     f.write(catalog_out)
     limiting_flux = noise * threshold_value
-    catalog_out = f'# limiting_flux (mJy/beam): {round(limiting_flux*1000,2)}  \n'
-    f.write(catalog_out)
+    #catalog_out = f'# limiting_flux (mJy/beam): {round(limiting_flux*1000,2)}  \n'
+    #f.write(catalog_out)
 
     contours = find_contours(mask_image, 0.5)
     # Start worker processes
@@ -496,7 +476,7 @@ def generate_source_list(filename, outfile, mask_image, threshold_value, noise, 
     f.write(catalog_out)
     catalog_out = f'# number of souces using peak for source position: {num_max} \n'
     f.write(catalog_out)
-    catalog_out = '#\n#  source    ra_hms  dec_dms ra(deg)  dec(deg)    flux(mJy)  error ang_size_(arcsec)  pos_angle_(deg)\n'
+    catalog_out = '#\n#  source    ra_hms  dec_dms ra(deg)  dec(deg)    flux(mJy)  error ang_size(arcsec)  pos_angle(deg)\n'
     f.write(catalog_out)
     for i in range(len(ra_sorted_list)):
        output = str(i) + ', ' + ra_sorted_list[i][1] + '\n'
@@ -772,7 +752,7 @@ def main():
     if args.gui:
         try:
             from bokeh.models import Label, BoxEditTool, ColumnDataSource, FreehandDrawTool
-            from bokeh.plotting import figure, output_file, show
+            from bokeh.plotting import figure, output_file, show, save
             from bokeh.io import curdoc, export_png
             from bokeh.io import curdoc
             curdoc().theme = 'caliber'
@@ -787,33 +767,38 @@ def main():
         origin_ra, origin_dec = fitsinfo['centre']
 
         # Pixel width in degrees
-        pixel_width = fitsinfo['ddec']
+        pixel_width = fitsinfo['dra']
 
         # Calculate the extent of the image in degrees
         # We assume a square image for simplicity
         extent = fitsinfo['numPix'] * pixel_width  # Assume equal pixels in each dimension
-
         # Specify the coordinates for the image
-        x_range = (origin_ra - extent/2.0, origin_ra + extent/2.0)
+        x_range = (origin_ra + extent/2.0, origin_ra - extent/2.0)
         y_range = (origin_dec - extent/2.0, origin_dec + extent/2.0)
 
         # Define the plot
-        p = figure(tooltips=[("x", "$x"), ("y", "$y"), ("value", "@image")], y_range=y_range)
-        p.x_range.range_padding = 0
-        p.x_range.flipped = True
-        p.title.text = out_mask_fits
+        p = figure(tooltips=[("x", "$x"), ("y", "$y"), ("value", "@image")], x_range=x_range, y_range=y_range)
+        #p.x_range.range_padding = 0
+        #p.y_range.range_padding = 0
+        #p.x_range.flipped = True
+        p.title.text = out_mask_fits.split('/')[-1]
+        p.title.align = 'center'
 
         # must give a vector of image data for image parameter
         # Plot the image using degree coordinates
-        p.image(image=[np.flip(mask_image, axis=1)], x=x_range[0], y=y_range[0], dw=extent, dh=extent, palette="Greys256", level="image")
+        #p.image(image=[np.flip(mask_image, axis=1)], x=x_range[0], y=y_range[0], dw=extent, dh=extent, palette="Greys256", level="image")
+        p.image(image=[np.fliplr(mask_image)], x=x_range[-1], y=y_range[0], dw=extent, dh=extent, palette="Greys256", level="image")
+        #p.image(image=[np.fliplr(mask_image)], palette="Greys256", level="image")
 
+        #import IPython; IPython.embed()
 
         # Extracting data from source_list
         x_coords = [float(d[1].split(', ')[2]) for d in source_list]
         y_coords = [float(d[1].split(', ')[3]) for d in source_list]
-        labels = [f"({d[1].split(', ')[0]}, {d[1].split(', ')[1]})" for d in source_list]
+        #labels = [f"({d[1].split(', ')[0]}, {d[1].split(', ')[1]})" for d in source_list]
+        labels = [f"({d[1].split(', ')[2]}, {d[1].split(', ')[3]})" for d in source_list]
         # Plotting points
-        p.circle(x_coords, y_coords, size=3, color="red", alpha=0.5)
+        p.scatter(x_coords, y_coords, size=3, color="red", alpha=0.5)
         for i, (x, y, label) in enumerate(zip(x_coords, y_coords, labels)):
             p.add_layout(Label(x=x, y=y, text=label, text_baseline="middle", text_align="center", text_font_size="10pt"))
         p.grid.grid_line_width = 0.5
@@ -826,9 +811,10 @@ def main():
         p.add_tools(draw_tool1)
         p.add_tools(draw_tool2)
         p.toolbar.active_drag = draw_tool1
-        output_file("breizorro.html", title="Mask Editor")
-        export_png(p, filename="breizorro.png")
-        show(p)
+        output_file("breizorro.html", title="Mask Viewer")
+        #export_png(p, filename="breizorro.png")
+        save(p)
+        #show(p)
 
     LOGGER.info(f"Enforcing that mask to binary")
     mask_image = mask_image!=0

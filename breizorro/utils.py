@@ -7,6 +7,7 @@ import os.path
 import re
 import numpy as np
 
+import astropy.units as u
 from astropy.io import fits
 from astropy.wcs import WCS
 from astropy.coordinates import Angle
@@ -31,7 +32,13 @@ def deg_to_dms(dec_deg):
     return degrees, minutes, seconds
 
 
-def format_source_coordinates(coord_ra_deg, coord_dec_deg):
+def format_source_coordinates(ra_deg, dec_deg):
+    coord = SkyCoord(ra=ra_deg*u.deg, dec=dec_deg*u.deg, frame='icrs')
+    ra_str = coord.ra.to_string(unit=u.hour, sep=':', precision=2)
+    dec_str = coord.dec.to_string(unit=u.deg, sep=':', precision=2)
+    return ra_str, dec_str
+
+def format_source_coordinates0(coord_ra_deg, coord_dec_deg):
     h,m,s = deg_to_hms(coord_ra_deg)
     if h < 10:
         h  = '0' + str(h)
@@ -139,22 +146,6 @@ def calculate_area(bmaj, bmin, pix_size):
 
     return area
 
-def calculate_weighted_centroid(x, y, flux_values):
-    # Calculate the total flux within the region  
-    total_flux = np.sum(flux_values)
-    # Initialize variables for weighted sums
-    weighted_sum_x = 0
-    weighted_sum_y = 0
-    # Loop through all pixels within the region
-    for xi, yi, flux in zip(x, y, flux_values):
-        # Add the weighted contribution of each pixel to the centroid
-        weighted_sum_x += xi * flux
-        weighted_sum_y += yi * flux
-    # Calculate the centroid coordinates
-    centroid_x = weighted_sum_x / total_flux
-    centroid_y = weighted_sum_y / total_flux
-    return centroid_x, centroid_y
-
 
 def fitsInfo(fitsname=None):
     """Get fits header info.
@@ -175,8 +166,8 @@ def fitsInfo(fitsname=None):
         'skyArea': skyArea, 'naxis': naxis}
 
     """
-    hdu = fits.open(fitsname)   
-    hdr = hdu[0].header
+    with fits.open(fitsname) as hdu:
+        hdr = hdu[0].header
     ra = hdr['CRVAL1']
     dra = abs(hdr['CDELT1'])
     raPix = hdr['CRPIX1']
@@ -210,6 +201,30 @@ def fitsInfo(fitsname=None):
                 'skyArea': skyArea, 'freq0': freq0}
     return fitsinfo
 
+
+def get_image_data(fitsfile):
+    """
+    Reads a FITS file and returns a tuple of the image array and the header.
+    
+    Parameters:
+    fitsfile (str): The path to the FITS file.
+    
+    Returns:
+    tuple: A tuple containing the image array and the header.
+    """
+    with fits.open(fitsfile) as input_hdu:
+        # Check the dimensionality of the data and extract the appropriate slice
+        if len(input_hdu[0].data.shape) == 2:
+            image = np.array(input_hdu[0].data[:, :])
+        elif len(input_hdu[0].data.shape) == 3:
+            image = np.array(input_hdu[0].data[0, :, :])
+        else:
+            image = np.array(input_hdu[0].data[0, 0, :, :])
+        
+        header = input_hdu[0].header
+    
+    return image, header
+
 def maxDist(contour, pixel_size):
     """Calculate maximum extent and position angle of a contour.
 
@@ -220,18 +235,21 @@ def maxDist(contour, pixel_size):
         Size of a pixel in the image (e.g., arcseconds per pixel).
 
     Returns:
-    ang_size : float
-        Maximum extent of the contour in angular units (e.g., arcseconds).
+    e_maj : float
+        Major axis of the contour in angular units (e.g., arcseconds).
+    e_min : float
+        Minor axis of the contour in angular units (e.g., arcseconds).
     pos_angle : float
         Position angle of the contour (in degrees).
     """
-    src_size = 0
+    e_maj = 0
+    e_min = np.inf  # Start with a very large value for the minor axis
     pos_angle = None
 
     # Convert the contour to a numpy array for easier calculations
     contour_array = np.array(contour)
 
-    # Calculate pairwise distances between all points in the contour
+    # Step 1: Loop through all pairs of points to find major and minor axes
     for i in range(len(contour_array)):
         for j in range(i+1, len(contour_array)):
             # Calculate Euclidean distance between points i and j
@@ -241,12 +259,16 @@ def maxDist(contour, pixel_size):
             dx, dy = contour_array[j] - contour_array[i]
             angle = np.degrees(np.arctan2(dy, dx))
 
-            # Update max_distance, max_points, and pos_angle if the calculated distance is greater
-            if distance > src_size:
-                src_size = distance
+            # Update e_maj and pos_angle if this distance is the largest
+            if distance > e_maj:
+                e_maj = distance
                 pos_angle = angle
 
-    return src_size, pos_angle
+            # Update e_min if this distance is the smallest
+            if distance < e_min:
+                e_min = distance
+
+    return e_maj, e_min, pos_angle
 
 
 def calculate_beam_area(bmaj, bmin, pix_size):
@@ -274,22 +296,22 @@ def calculate_beam_area(bmaj, bmin, pix_size):
 
 def get_source_size(contour, pixel_size, mean_beam, image, int_peak_ratio):
     result = maxDist(contour,pixel_size)
-    src_angle = result[0]
-    pos_angle = result[1]
+    src_angle = result[:-1]
+    pos_angle = result[-1]
     contour_pixels = PixCoord([c[0] for c in contour], [c[1] for c in contour])
     p = PolygonPixelRegion(vertices=contour_pixels, meta={'label': 'Region'})
     source_beam_ratio =  p.area / mean_beam
     # first test for point source
     point_source = False
-    if (int_peak_ratio <= 0.2) or (src_angle <= mean_beam):
+    if (int_peak_ratio <= 0.2) or (src_angle[0] <= mean_beam):
         point_source = True
     if source_beam_ratio <=  1.0:
         point_source = True
     if point_source:
-        src_size = (0.0, 0.0)
-        print(f"Point source because {int_peak_ratio} <= 0.2 and {src_angle} <= {mean_beam}")
+        src_size = (0.0, 0.0, 0.0)
     else:
-        ang = round(src_angle,2)
+        emaj = round(src_angle[0],2)
+        emin = round(src_angle[-1],2)
         pa = round(pos_angle,2)
-        src_size = (ang, pa)
+        src_size = (emaj, emin, pa)
     return src_size

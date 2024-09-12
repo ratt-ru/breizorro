@@ -7,6 +7,7 @@ import os.path
 import re
 import numpy as np
 
+import astropy.units as u
 from astropy.io import fits
 from astropy.wcs import WCS
 from astropy.coordinates import Angle
@@ -26,12 +27,8 @@ import scipy.ndimage
 from skimage.draw import polygon as skimage_polygon
 from skimage.measure import find_contours
 
-from multiprocessing import Process, Queue
-
-from operator import itemgetter, attrgetter
-
 from breizorro.utils import get_source_size, format_source_coordinates, deg2ra, deg2dec
-from breizorro.utils import fitsInfo, calculate_beam_area
+from breizorro.utils import get_image_data, fitsInfo, calculate_beam_area
 
 
 def create_logger():
@@ -47,40 +44,20 @@ def create_logger():
 
 LOGGER = create_logger()
 
-def get_image(fitsfile):
-    """
-    Reads FITS file, returns tuple of image_array, header
-    """
-    LOGGER.info(f"Reading {fitsfile} data")
-    input_hdu = fits.open(fitsfile)[0]
-    if len(input_hdu.data.shape) == 2:
-        image = numpy.array(input_hdu.data[:, :])
-    elif len(input_hdu.data.shape) == 3:
-        image = numpy.array(input_hdu.data[0, :, :])
-    else:
-        image = numpy.array(input_hdu.data[0, 0, :, :])
-    return image, input_hdu.header
-
-
-def get_image_header(fitsfile):
-    LOGGER.info(f"Reading {fitsfile} header")
-    input_hdu = fits.open(fitsfile)[0]
-    return input_hdu.header
-
 
 def flush_fits(newimage, fitsfile, header=None):
     LOGGER.info(f"Writing {fitsfile}")
-    f = fits.open(fitsfile, mode='update')
-    input_hdu = f[0]
-    if len(input_hdu.data.shape) == 2:
-        input_hdu.data[:, :] = newimage
-    elif len(input_hdu.data.shape) == 3:
-        input_hdu.data[0, :, :] = newimage
-    else:
-        input_hdu.data[0, 0, :, :] = newimage
-    if header:
-        input_hdu.header = header
-    f.flush()
+    with fits.open(fitsfile, mode='update') as f:
+        input_hdu = f[0]
+        if len(input_hdu.data.shape) == 2:
+            input_hdu.data[:, :] = newimage
+        elif len(input_hdu.data.shape) == 3:
+            input_hdu.data[0, :, :] = newimage
+        else:
+            input_hdu.data[0, 0, :, :] = newimage
+        if header:
+            input_hdu.header = header
+        f.flush()
 
 
 def make_noise_map(restored_image, boxsize):
@@ -136,129 +113,6 @@ def remove_regions(mask_image, regs, wcs):
         mask_image[reg.to_mask().to_image(mask_image.shape) != 0] = 0
 
 
-def process_contour(contour, image_data, fitsinfo, noise_out):
-    use_max = 0
-    lon = 0 
-    pix_size = fitsinfo['ddec'] * 3600.0
-    bmaj, bmin,_ = np.array(fitsinfo['b_size']) * 3600.0
-    mean_beam = 0.5 * (bmaj + bmin)
-    pix_beam = calculate_beam_area(bmaj/2, bmin/2, pix_size)
-    wcs = fitsinfo['wcs']
-    while len(wcs.array_shape) > 2:
-        wcs = wcs.dropaxis(len(wcs.array_shape) - 1)
-
-    contour_sky = wcs.pixel_to_world(contour[:, 1], contour[:, 0])
-    polygon_region = PolygonSkyRegion(vertices=contour_sky)
-    pix_region = polygon_region.to_pixel(wcs)
-    mask = pix_region.to_mask().to_image(image_data.shape[-2:])
-    try:
-        data = mask * image_data
-        nndata = data # np.flip(data, axis=0)
-        #nndata = nndata[~np.isnan(nndata)]
-        total_flux = np.sum(nndata[nndata != -0.0])/pix_beam
-        peak_flux = nndata.max()/pix_beam
-    except: 
-        LOGGER.warn('Failure to get maximum within contour')
-        LOGGER.info('Probably a contour at edge of image - skipping')
-        peak_flux = 0.0
-    if total_flux:
-        total_peak_ratio =  np.abs((total_flux - peak_flux) / total_flux)
-        flux_density_error = 0.001
-        #beam_error = contained_points/pixels_beam  * noise_out
-        #ten_pc_error = 0.1 * total_flux
-        #flux_density_error = np.sqrt(ten_pc_error * ten_pc_error + beam_error * beam_error)
-        #contour = []
-        #for i in range(len(x)):
-        #    contour.append([x[i],y[i]])
-        #centroid = calculate_weighted_centroid(x,y, data_result)
-        #pix_centroid = PixCoord(centroid[0], centroid[1])
-        #contour_pixels = PixCoord(np.array(x), np.array(y))
-        #p = PolygonPixelRegion(vertices=contour_pixels, meta={'label': 'Region'})
-        #ra, dec = wcs.all_pix2world(pix_centroid.x, pix_centroid.y,0)
-        #if p.contains(pix_centroid)[0]:
-        #    ra, dec = wcs.all_pix2world(pix_centroid.x, pix_centroid.y,0)
-        #else:
-        if True:
-            use_max = 1
-            LOGGER.warn('centroid lies outside polygon - using peak position')
-            location = list(np.unravel_index(np.argmax(nndata, axis=None), data.shape))
-            location.reverse()
-            print(location)
-            #x_pos = rr[location]
-            #y_pos = cc[location]
-            #data_max = image_data[x_pos,y_pos] / pixels_beam
-            #data_max = image_data[x_pos,y_pos]
-            pos_pixels = PixCoord(*location)
-            ra, dec = wcs.all_pix2world(pos_pixels.x, pos_pixels.y, 0)
-            ra, dec = float(ra), float(dec)
-            #import IPython; IPython.embed()
-
-        source_flux = (round(total_flux * 1000, 3), round(flux_density_error * 1000, 4))
-        source_size = get_source_size(contour, pix_size, mean_beam, image_data, total_peak_ratio)
-        source_pos = format_source_coordinates(ra, dec)
-        print(source_pos)
-        print(total_flux)
-        source = source_pos + (ra, dec) + source_flux + source_size
-        catalog_out = ', '.join(str(src_prop) for src_prop in source)
-    else:
-        # Dummy source to be eliminated
-        lon = -np.inf 
-        catalog_out = ''
-    return (ra, catalog_out, use_max)
-
-
-def multiprocess_contours(contours, image_data, fitsinfo, mean_beam, ncpu=None):
-
-    def contour_worker(input, output):
-        for func, args in iter(input.get, 'STOP'):
-            result = func(*args)
-            output.put(result)
-
-    source_list = []
-    # Start worker processes
-    if not ncpu:
-        try:
-            import multiprocessing
-            ncpu =  multiprocessing.cpu_count()
-            LOGGER.info(f'Setting number of processors to {ncpu}')
-        except:
-            pass
-    TASKS = []
-    #import IPython; IPython.embed()
-    for i in range(len(contours)):
-        contour = contours[i]
-        if len(contour) > 2:
-            x = []
-            y = []
-            for j in range(len(contour)):
-                x.append(contour[j][0])
-                y.append(contour[j][1])
-            TASKS.append((process_contour,(contour, image_data, fitsinfo, mean_beam)))
-    task_queue = Queue()
-    done_queue = Queue()
-    # Submit tasks
-    LOGGER.info('Submitting distributed tasks. This might take a while...')
-    for task in TASKS:
-        task_queue.put(task)
-    for i in range(ncpu):
-        Process(target=contour_worker, args=(task_queue, done_queue)).start()
-
-    num_max = 0
-    # Get the results from parallel processing
-    for i in range(len(TASKS)):
-        catalog_out = done_queue.get(timeout=300)
-        if catalog_out[0] > -np.inf:
-            source_list.append(catalog_out)
-            num_max += catalog_out[2]
-    # Tell child processes to stop
-    for i in range(ncpu):
-        task_queue.put('STOP')
-
-    ra_sorted_list = sorted(source_list, key = itemgetter(0))
-
-    return ra_sorted_list
-
-
 def main():
     LOGGER.info("Welcome to breizorro")
     # Get version
@@ -309,7 +163,7 @@ def main():
     parser.add_argument('--sum-peak', dest='sum_peak', default=None,
                         help='Sum to peak ratio of flux islands to mask in original image.'
                              'e.g. --sum-peak 100 will mask everything with a ratio above 100')
-    parser.add_argument('-ncpu', '--ncpu', dest='ncpu', default=None,
+    parser.add_argument('-ncpu', '--ncpu', dest='ncpu', default=None, type=int,
                         help='Number of processors to use for cataloging.')
     parser.add_argument('-beam', '--beam-size', dest='beam', default=None,
                         help='Average beam size in arcesc incase beam info is missing in image header.')
@@ -343,7 +197,7 @@ def main():
 
     # first, load or generate mask
     if args.imagename:
-        input_image, input_header = get_image(input_file)
+        input_image, input_header = get_image_data(input_file)
         LOGGER.info(f"Generating mask using threshold {threshold}")
 
         noise_image = make_noise_map(input_image, boxsize)
@@ -365,7 +219,7 @@ def main():
         out_mask_fits = args.outfile or f"{name}.mask.fits"
 
     elif args.maskname:
-        mask_image, mask_header = get_image(args.maskname)
+        mask_image, mask_header = get_image_data(args.maskname)
         LOGGER.info(f"Input mask loaded")
 
         out_mask_fits = args.outfile or f"{name}.out.{ext}"
@@ -382,7 +236,7 @@ def main():
         fits = regs = None
         # read as FITS or region
         try:
-            fits = get_image(filename)
+            fits = get_image_data(filename)
         except OSError:
             try:
                 regs = regions.Regions.read(filename)
@@ -493,6 +347,10 @@ def main():
         mask_header['BUNIT'] = 'Jy/beam'
         mask_image = input_image * new_mask_image
         LOGGER.info(f"Number of extended islands found: {len(extended_islands)}")
+        shutil.copyfile(input_file, out_mask_fits)  # to provide a template
+        flush_fits(mask_image, out_mask_fits, mask_header)
+        LOGGER.info("Done")
+        sys.exit(1)
 
     if args.outcatalog or args.outregion:
         contours = find_contours(mask_image, 0.5)
@@ -512,13 +370,22 @@ def main():
             LOGGER.info(f"Saving regions in {args.outregion}")
 
     if args.outcatalog and args.imagename:
+        try:
+            import warnings
+            # Suppress FittingWarnings from Astropy
+            # WARNING: The fit may be unsuccessful; check fit_info['message'] for more information. [astropy.modeling.fitting]
+            warnings.resetwarnings()
+            warnings.filterwarnings('ignore', category=UserWarning, append=True)
+            from breizorro.catalog import multiprocess_contours
+        except ModuleNotFoundError:
+            LOGGER.error("Running breizorro source detector requires optional dependencies, please re-install with: pip install breizorro[catalog]")
+            raise('Missing cataloguing dependencies')
         source_list = []
-        image_data, hdu_header = get_image(args.imagename)
+        image_data, hdu_header = get_image_data(args.imagename)
         fitsinfo = fitsInfo(args.imagename)
         mean_beam = None # Use beam info from the image header by default
         if args.beam:
             mean_beam = float(args.beam)
-        noise = np.median(noise_image)
         if mean_beam:
             LOGGER.info(f'Using user provided size: {mean_beam}')
         elif fitsinfo['b_size']:
@@ -527,6 +394,7 @@ def main():
         else:
             raise('No beam information found. Specify mean beam in arcsec: --beam-size 6.5')
 
+        noise = np.median(noise_image)
         f = open(args.outcatalog, 'w')
         catalog_out = f'# processing fits image: {args.imagename}  \n'
         f.write(catalog_out)
@@ -541,80 +409,29 @@ def main():
         limiting_flux = noise * threshold
         catalog_out = f'# cutt-off flux  (mJy/beam): {round(limiting_flux*1000,2)} \n'
         f.write(catalog_out)
+        LOGGER.info('Submitting distributed tasks. This might take a while...') 
         source_list = multiprocess_contours(contours, image_data, fitsinfo, mean_beam, args.ncpu)
+        catalog_out = f"# freq0 (Hz): {fitsinfo['freq0']} \n"
+        f.write(catalog_out)
         catalog_out = f'# number of sources detected: {len(source_list)} \n'
         f.write(catalog_out)
-        #catalog_out = f'# number of souces using peak for source position: {num_max} \n'
-        #f.write(catalog_out)
-        catalog_out = '#\n#  source    ra_hms  dec_dms ra(deg)  dec(deg)    flux(mJy)  error ang_size(arcsec)  pos_angle(deg)\n'
+        catalog_out = '#\n#format: name ra_d dec_d i i_err emaj_s emin_s pa_d\n'
         f.write(catalog_out)
         for i in range(len(source_list)):
-            output = str(i) + ', ' + source_list[i][1] + '\n'
+            output = 'src' + str(i) + ' ' + source_list[i][1] + '\n'
             f.write(output)
         f.close()
         LOGGER.info(f'Source catalog saved: {args.outcatalog}')
 
     if args.gui:
         try:
-            from bokeh.models import Label, BoxEditTool, ColumnDataSource, FreehandDrawTool
-            from bokeh.plotting import figure, output_file, show
-            from bokeh.io import curdoc, export_png
-            from bokeh.io import curdoc
-            curdoc().theme = 'caliber'
+            from breizorro.gui import display
         except ModuleNotFoundError:
             LOGGER.error("Running breizorro gui requires optional dependencies, please re-install with: pip install breizorro[gui]")
             raise('Missing GUI dependencies')
 
         LOGGER.info("Loading Gui ...")
-        fitsinfo = fitsInfo(args.imagename or args.maskname)
-
-        # Origin coordinates
-        origin_ra, origin_dec = fitsinfo['centre']
-
-        # Pixel width in degrees
-        pixel_width = fitsinfo['ddec']
-
-        # Calculate the extent of the image in degrees
-        # We assume a square image for simplicity
-        extent = fitsinfo['numPix'] * pixel_width  # Assume equal pixels in each dimension
-
-        # Specify the coordinates for the image
-        x_range = (origin_ra - extent/2.0, origin_ra + extent/2.0)
-        y_range = (origin_dec - extent/2.0, origin_dec + extent/2.0)
-
-        # Define the plot
-        p = figure(tooltips=[("x", "$x"), ("y", "$y"), ("value", "@image")], y_range=y_range)
-        #p.x_range.range_padding = 0
-        #p.y_range.range_padding = 0
-        p.x_range.flipped = True
-        p.title.text = out_mask_fits
-
-        # must give a vector of image data for image parameter
-        # Plot the image using degree coordinates
-        p.image(image=[np.flip(mask_image, axis=1)], x=x_range[0], y=y_range[0], dw=extent, dh=extent, palette="Greys256", level="image")
-
-        if args.outcatalog:
-            # Extracting data from source_list
-            x_coords = [float(d[1].split(', ')[2]) for d in source_list]
-            y_coords = [float(d[1].split(', ')[3]) for d in source_list]
-            labels = [f"({d[1].split(', ')[0]}, {d[1].split(', ')[1]})" for d in source_list]
-            # Plotting points
-            p.circle(x_coords, y_coords, size=3, color="red", alpha=0.5)
-            for i, (x, y, label) in enumerate(zip(x_coords, y_coords, labels)):
-                p.add_layout(Label(x=x, y=y, text=label, text_baseline="middle", text_align="center", text_font_size="10pt"))
-        p.grid.grid_line_width = 0.5
-        src1 = ColumnDataSource({'x': [], 'y': [], 'width': [], 'height': [], 'alpha': []})
-        src2 = ColumnDataSource({'xs': [], 'ys': [], 'alpha': []})
-        renderer1 = p.rect('x', 'y', 'width', 'height', source=src1, alpha='alpha')
-        renderer2 = p.multi_line('xs', 'ys', source=src2, alpha='alpha')
-        draw_tool1 = BoxEditTool(renderers=[renderer1], empty_value=1)
-        draw_tool2 = FreehandDrawTool(renderers=[renderer2])
-        p.add_tools(draw_tool1)
-        p.add_tools(draw_tool2)
-        p.toolbar.active_drag = draw_tool1
-        output_file("breizorro.html", title="Mask Editor")
-        export_png(p, filename="breizorro1.png")
-        show(p)
+        display(args.imagename or args.maskname, mask_image, args.outcatalog, source_list)
 
     LOGGER.info(f"Enforcing that mask to binary")
     mask_image = mask_image!=0

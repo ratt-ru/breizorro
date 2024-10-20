@@ -88,6 +88,12 @@ To show help message and exit
                                 Suffix for mask image (default based on input name
           --gui                 Open mask in gui.
 
+=============
+Documentation
+=============
+
+Documentation is available on the GitHub page_.
+
 =======
 License
 =======
@@ -116,3 +122,4 @@ standards pep8_.
 .. _source: https://github.com/ratt-ru/breizorro
 .. _license: https://github.com/ratt-ru/breizorro/blob/main/LICENSE
 .. _pep8: https://www.python.org/dev/peps/pep-0008
+.. _page: https://ratt-ru.github.io/breizorro

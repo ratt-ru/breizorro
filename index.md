@@ -1,5 +1,3 @@
-
-
 ![Octocat](https://github.githubassets.com/images/icons/emoji/octocat.png)
 
 Breizorro is a flexible software program made to simplify image analysis tasks, including identifying emission islands and generating and modifying picture masks, which are frequently used in radio interferometric imaging.
@@ -8,12 +6,16 @@ Breizorro is a flexible software program made to simplify image analysis tasks, 
 
 Breizorro uses the minimal filter to generate binary masks by replacing each pixel's value with the lowest value found in its near vicinity. This is incredibly effective at reducing noise and highlighting or smoothing particular regions of a picture, such as the regions surrounding bright or small sources. Users can specify a window (or kernel) of a specific size that moves over the image as well as a sigma threshold for masking.
 
-```breizorro -t 6.5 -b 50 -r circinus-MFS-image.fits```
+```
+breizorro -t 6.5 -b 50 -r circinus-MFS-image.fits
+```
 
 ![mypipelinerun_circinus_p3_3-MFS-image fits-mypipelinerun_circinus_p3_3-MFS-image mask fits-image-2024-09-11-10-35-43](https://github.com/user-attachments/assets/cfd2f918-340a-4148-96a2-c00ca41b33d0)
 
 
-```breizorro -r circinus-MFS-image.fits --sum-peak 500```
+```
+breizorro -r circinus-MFS-image.fits --sum-peak 500
+```
 
 ![mypipelinerun_circinus_p3_3-MFS-image mask fits-mypipelinerun_circinus_p3_3-MFS-image mask fits-image-2024-09-11-13-23-14](https://github.com/user-attachments/assets/0ff50068-ec8a-42bf-8539-9f68f15a1ea9)
 
@@ -21,11 +23,15 @@ Breizorro uses the minimal filter to generate binary masks by replacing each pix
 
 Breizorro makes it easier to create and work with regions using image masks. Labeling, eliminating, extracting, and filtering regions (islands) based on user-specified criteria are all included in this. Users can employ techniques including erosion, dilation, hole-filling, binary masking, and inversion to refine their regions of interest.
 
-```breizorro -r circinus-MFS-image.fits --save-regions circinus.reg```
+```
+breizorro -r circinus-MFS-image.fits --save-regions circinus.reg
+```
 
 ![mypipelinerun_circinus_p3_3-MFS-image fits-image-2024-09-11-10-38-15](https://github.com/user-attachments/assets/14f435e1-6234-4515-9597-c3002a644975)
 
-```breizorro -r circinus-MFS-image.fits --merge west.reg --dilate 1 --fill-holes```
+```
+breizorro -r circinus-MFS-image.fits --merge west.reg --dilate 1 --fill-holes
+```
 
 ![mypipelinerun_circinus_p3_3-MFS-image mask fits-mypipelinerun_circinus_p3_3-MFS-image mask fits-image-2024-09-11-13-59-39](https://github.com/user-attachments/assets/2308c7b7-2ec0-4895-b93b-5d96f3d99337)
 
@@ -35,7 +41,9 @@ Breizorro makes it easier to create and work with regions using image masks. Lab
 Breizorro enables catalog generation from extracted regions, saving source properties to an ASCII/text
 file.
 
-```breizorro -r circinus-MFS-image.fits --save-catalog circinus.txt```
+```
+breizorro -r circinus-MFS-image.fits --save-catalog circinus.txt
+```
 
 ```
 # processing fits image: circinus-MFS-image.fits

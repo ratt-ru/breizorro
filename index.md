@@ -126,3 +126,10 @@ breizorro -r circinus-MFS-image.fits --save-catalog circinus.txt
 ```
 
 ![Screenshot 2024-09-11 100116](https://github.com/user-attachments/assets/79d3ece6-5d96-48a1-a06e-fbae2987d333)
+
+
+# Contributors
+
+Thank you to the people who have contributed to this project.
+
+[![Contributors](https://contrib.rocks/image?repo=ratt-ru/breizorro)](https://github.com/ratt-ru/breizorro/graphs/contributors)

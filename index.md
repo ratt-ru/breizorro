@@ -2,7 +2,7 @@
   <img src="https://github.com/user-attachments/assets/478422f4-f26d-4d92-b221-cff884052dfa" alt="Breizorro Logo">
 </p>
 
-Breizorro is a flexible software program made to simplify image analysis tasks, including identifying emission islands and generating and modifying picture masks, which are frequently used in radio interferometric imaging.
+Breizorro is a flexible software program made to simplify image analysis tasks, including identifying emission islands and generating and modifying image masks, which are frequently used in radio interferometric imaging.
 
 
 # Parameter definition

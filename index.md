@@ -1,4 +1,4 @@
-![Octocat](https://github.githubassets.com/images/icons/emoji/octocat.png)
+![breiz](https://github.com/user-attachments/assets/9f2376eb-37a1-4f73-8675-3c92b5da1e99)
 
 Breizorro is a flexible software program made to simplify image analysis tasks, including identifying emission islands and generating and modifying picture masks, which are frequently used in radio interferometric imaging.
 
@@ -21,7 +21,8 @@ breizorro -r circinus-MFS-image.fits --sum-peak 500
 
 # Region Generation and Manipulation
 
-Breizorro makes it easier to create and work with regions using image masks. Labeling, eliminating, extracting, and filtering regions (islands) based on user-specified criteria are all included in this. Users can employ techniques including erosion, dilation, hole-filling, binary masking, and inversion to refine their regions of interest.
+Breizorro makes it easier to create and work with regions using image masks. Labeling, eliminating, extracting, and filtering regions (islands) based on user-specified criteria are all included in this. Us![breiz](https://github.com/user-attachments/assets/7b1f1a68-d0df-45fe-88eb-61800af3bf19)
+ers can employ techniques including erosion, dilation, hole-filling, binary masking, and inversion to refine their regions of interest.
 
 ```
 breizorro -r circinus-MFS-image.fits --save-regions circinus.reg

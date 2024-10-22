@@ -122,7 +122,7 @@ def display(imagename, mask_image, outcatalog, source_list):
         p = figure(title="Breizorro Source Catalog",
                    x_axis_label="RA (deg)",
                    y_axis_label="DEC (deg)",
-                   y_range=(min(y_coords)-0.1, max(y_coords)+0.1), # Add margin
+                   y_range=(min(y_coords), max(y_coords)),
                    match_aspect=True,
                    tooltips=[("x", "$x"), ("y", "$y"), ("value", "@image")])
         # Plot the image
@@ -149,6 +149,7 @@ def display(imagename, mask_image, outcatalog, source_list):
         p.add_tools(hover)
         # Enable legend click to hide/show scatter points
         p.legend.click_policy = "hide"
+        p.legend.label_text_color = "white"  # Set the legend text color to white
         p.x_range.flipped = True
         p.title.align = "center"
         p.add_layout(labels)

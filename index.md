@@ -122,11 +122,12 @@ src10 -147.28370646739054 -65.42936506202037 9e-05 0.0001 0.0 0.0 0.0
 ```
 
 ```
-breizorro -r circinus-MFS-image.fits --save-catalog circinus.txt
+breizorro -r circinus-MFS-image.fits --save-catalog circinus.txt --gui
 ```
 
 ![Screenshot 2024-09-11 100116](https://github.com/user-attachments/assets/79d3ece6-5d96-48a1-a06e-fbae2987d333)
 
+For a live demo of the viewer, visit: [breiz-viewer](breizorro.html)
 
 # Contributors
 

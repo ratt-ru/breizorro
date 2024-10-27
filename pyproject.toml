@@ -32,6 +32,7 @@ scipy = "*"
 
 # Optional dependencies start here
 bokeh = { version = "*", optional = true}
+photutils = { version = "*", optional = true}
 pytest = { version = "*", optional=true }
 pytest-flake8 = { version = "*", optional=true }
 
@@ -40,7 +41,9 @@ requires = ["setuptools", "poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.extras]
+all = ["bokeh", "photutils"]
 gui = ["bokeh"]
+catalog = ["photutils"]
 testing = ["pytest", "pytest-flake8"]
 
 [tool.poetry.group.tests]

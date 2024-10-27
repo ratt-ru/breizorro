@@ -55,15 +55,17 @@ def display(imagename, mask_image, outcatalog, source_list):
     # Origin coordinates
     origin_ra, origin_dec = fitsinfo['centre']
     # Pixel width in degrees
-    pixel_width = fitsinfo['ddec']
+    pixel_width = fitsinfo['dra']
+    pixel_height = fitsinfo['ddec']
     # Calculate the extent of the image in degrees
     # We assume a square image for simplicity
-    extent = fitsinfo['numPix'] * pixel_width  # Assume equal pixels in each dimension
+    extent_x = fitsinfo['numPix'] * pixel_width  # Assume equal pixels in each dimension
+    extent_y = fitsinfo['numPix'] * pixel_height  # Assume equal pixels in each dimension
     # Ensure RA is always positive (in degrees, 0 to 360)
     origin_ra = origin_ra % 360
     # Specify the coordinates for the image
-    x_range = (origin_ra - extent/2.0, origin_ra + extent/2.0)
-    y_range = (origin_dec - extent/2.0, origin_dec + extent/2.0)
+    x_range = (origin_ra - extent_x/2.0, origin_ra + extent_x/2.0)
+    y_range = (origin_dec - extent_y/2.0, origin_dec + extent_y/2.0)
     if outcatalog:
         # Extracting data from source_list
         x_coords = [float(d[1].split(' ')[0]) for d in source_list]
@@ -164,7 +166,7 @@ def display(imagename, mask_image, outcatalog, source_list):
         """)
         # Connect the hover tool to the callback
         hover.callback = callback
-        layout = row(p, data_table)
+        layout = row(p, data_table, sizing_mode="stretch_both")
         output_file("breizorro.html", title="Mask Editor")
         #export_png(p, filename="breizorro.png")
         show(layout)

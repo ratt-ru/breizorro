@@ -122,8 +122,9 @@ def display(imagename, mask_image, outcatalog, source_list):
 
         # Create the plot
         p = figure(title="Breizorro Source Catalog",
-                   x_axis_label="RA (deg)",
-                   y_axis_label="DEC (deg)",
+                   x_axis_label="Right Ascension",
+                   y_axis_label="Declination",
+                   #x_range=(max(x_coords), min(x_coords)),
                    y_range=(min(y_coords), max(y_coords)),
                    match_aspect=True,
                    tooltips=[("x", "$x"), ("y", "$y"), ("value", "@image")])
@@ -159,6 +160,25 @@ def display(imagename, mask_image, outcatalog, source_list):
         #from bokeh.models import DatetimeTickFormatter
         #p.xaxis.formatter = DatetimeTickFormatter(hours=["%Hh%Mm%Ss"])
         #p.yaxis.formatter = DatetimeTickFormatter(minutes=["%Dd%Mm%Ss"])
+        from bokeh.models import CustomJSTickFormatter
+        # Formatter for RA axis (converting degrees to hh:mm:ss)
+        p.xaxis.formatter = CustomJSTickFormatter(code="""
+            // Convert RA from degrees to hours, minutes, and seconds
+            let hours = Math.floor(tick / 15);  // 15 degrees per hour
+            let minutes = Math.floor((tick % 15) * 4);
+            let seconds = Math.floor((((tick % 15) * 4) - minutes) * 60);
+            return hours + "h " + minutes + "m " + seconds + "s";
+        """)
+
+        # Formatter for Dec axis (converting degrees to dd:mm:ss)
+        p.yaxis.formatter = CustomJSTickFormatter(code="""
+            // Convert Dec from degrees to degrees, minutes, and seconds
+            let degrees = Math.floor(Math.abs(tick));
+            let minutes = Math.floor((Math.abs(tick) - degrees) * 60);
+            let seconds = Math.floor((((Math.abs(tick) - degrees) * 60) - minutes) * 60);
+            let sign = tick < 0 ? '-' : '';
+            return sign + degrees + "° " + minutes + "' " + seconds + '"';
+        """)
         # JavaScript callback to select the corresponding row in the table when hovering over a point
         callback = CustomJS(args=dict(source=table_source), code="""
             var indices = cb_data.index['1d'].indices;  // Get the index of the hovered point

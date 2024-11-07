@@ -410,7 +410,7 @@ def main():
         catalog_out = f'# cutt-off flux  (mJy/beam): {round(limiting_flux*1000,2)} \n'
         f.write(catalog_out)
         LOGGER.info('Submitting distributed tasks. This might take a while...') 
-        source_list = multiprocess_contours(contours, image_data, fitsinfo, mean_beam, args.ncpu)
+        source_list = multiprocess_contours(contours, image_data, fitsinfo, noise, args.ncpu)
         catalog_out = f"# freq0 (Hz): {fitsinfo['freq0']} \n"
         f.write(catalog_out)
         catalog_out = f'# number of sources detected: {len(source_list)} \n'

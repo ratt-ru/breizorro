@@ -225,7 +225,8 @@ def get_image_data(fitsfile):
     
     return image, header
 
-def maxDist(contour, pixel_size):
+
+def maxDist(contour, pixel_size, x_centroid, y_centroid):
     """Calculate maximum extent and position angle of a contour.
 
     Parameters:
@@ -233,6 +234,10 @@ def maxDist(contour, pixel_size):
         List of coordinates defining the contour.
     pixel_size : float
         Size of a pixel in the image (e.g., arcseconds per pixel).
+    x_centroid: int
+        X-coordinate of the centroid.
+    y_centroid: int
+        Y-coordinate of the centroid.
 
     Returns:
     e_maj : float
@@ -242,34 +247,22 @@ def maxDist(contour, pixel_size):
     pos_angle : float
         Position angle of the contour (in degrees).
     """
-    e_maj = 0
-    e_min = np.inf  # Start with a very large value for the minor axis
-    pos_angle = None
-
-    # Convert the contour to a numpy array for easier calculations
     contour_array = np.array(contour)
+    distances = np.linalg.norm(contour_array - [y_centroid, x_centroid], axis=1)
 
-    # Step 1: Loop through all pairs of points to find major and minor axes
-    for i in range(len(contour_array)):
-        for j in range(i+1, len(contour_array)):
-            # Calculate Euclidean distance between points i and j
-            distance = np.linalg.norm(contour_array[i] - contour_array[j]) * pixel_size
+    # Find the indices of the points with maximum and minimum distances
+    max_idx = np.argmax(distances)
+    min_idx = np.argmin(distances)
 
-            # Calculate positional angle between points i and j
-            dx, dy = contour_array[j] - contour_array[i]
-            angle = np.degrees(np.arctan2(dy, dx))
+    # Calculate major and minor axes
+    e_maj = np.max(distances) * pixel_size
+    e_min = np.min(distances) * pixel_size
 
-            # Update e_maj and pos_angle if this distance is the largest
-            if distance > e_maj:
-                e_maj = distance
-                pos_angle = angle
-
-            # Update e_min if this distance is the smallest
-            if distance < e_min:
-                e_min = distance
+    # Calculate position angle
+    dx, dy = contour_array[max_idx] - [x_centroid, y_centroid]
+    pos_angle = np.degrees(np.arctan2(dy, dx))
 
     return e_maj, e_min, pos_angle
-
 
 def calculate_beam_area(bmaj, bmin, pix_size):
     """
@@ -294,8 +287,8 @@ def calculate_beam_area(bmaj, bmin, pix_size):
     return area
 
 
-def get_source_size(contour, pixel_size, mean_beam, image, int_peak_ratio):
-    result = maxDist(contour,pixel_size)
+def get_source_size(contour, pixel_size, mean_beam, image, int_peak_ratio, centroids):
+    result = maxDist(contour,pixel_size,*centroids)
     src_angle = result[:-1]
     pos_angle = result[-1]
     contour_pixels = PixCoord([c[0] for c in contour], [c[1] for c in contour])

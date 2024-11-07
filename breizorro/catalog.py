@@ -22,7 +22,10 @@ def process_contour(contour, image_data, fitsinfo, noise_out):
     polygon_region = PolygonSkyRegion(vertices=contour_sky)
     pix_region = polygon_region.to_pixel(wcs)
     mask = pix_region.to_mask().to_image(image_data.shape[-2:])
-    #contained_points = len(polygon_region.vertices.y) #len(rr) # needed for estimating flux density error
+    # Calculate the number of pixels in the source region (where mask > 0)
+    source_area_pix = np.sum(mask > 0)  # Count of pixels in the masked source region
+    # Now calculate the number of beams covering the source
+    source_beams = source_area_pix / pix_beam  # Number of beams covering the source
     try:
         data = mask * image_data
         nndata = data # np.flip(data, axis=0)
@@ -33,18 +36,19 @@ def process_contour(contour, image_data, fitsinfo, noise_out):
         peak_flux = 0.0
     if total_flux:
         total_peak_ratio =  np.abs((total_flux - peak_flux) / total_flux)
-        flux_density_error = 0.0001
-        #beam_error = contained_points/pixels_beam  * noise_out
-        #ten_pc_error = 0.1 * total_flux
-        #flux_density_error = np.sqrt(ten_pc_error * ten_pc_error + beam_error * beam_error)
+        # Flux density error estimation
+        ten_pc_error = 0.1 * total_flux  # a 10% error term as an additional conservative estimate
+        beam_error = np.sqrt(source_beams) * noise_out
+        flux_density_error = np.sqrt(ten_pc_error**2 + beam_error**2)  # combined error
         # Calculate weighted centroid
-        centroid_x, centroid_y = centroids.centroid_2dg(data)
+        _centroids = centroids.centroid_2dg(data)
+        centroid_x, centroid_y = _centroids
         ra, dec = wcs.all_pix2world(centroid_x, centroid_y, 0)
         # Ensure RA is positive
         if ra < 0:
             ra += 360
         source_flux = (round(total_flux, 5), round(flux_density_error, 5))
-        source_size = get_source_size(contour, pix_size, mean_beam, image_data, total_peak_ratio)
+        source_size = get_source_size(contour, pix_size, mean_beam, image_data, total_peak_ratio, _centroids)
         #source_pos = format_source_coordinates(ra, dec)
         source = (ra, dec) + source_flux + source_size
         catalog_out = ' '.join(str(src_prop) for src_prop in source)
@@ -55,7 +59,7 @@ def process_contour(contour, image_data, fitsinfo, noise_out):
     return (ra, catalog_out, use_max)
 
 
-def multiprocess_contours(contours, image_data, fitsinfo, mean_beam, ncpu=None):
+def multiprocess_contours(contours, image_data, fitsinfo, noise_out, ncpu=None):
 
     def contour_worker(input, output):
         for func, args in iter(input.get, 'STOP'):
@@ -79,7 +83,7 @@ def multiprocess_contours(contours, image_data, fitsinfo, mean_beam, ncpu=None):
             for j in range(len(contour)):
                 x.append(contour[j][0])
                 y.append(contour[j][1])
-            TASKS.append((process_contour,(contour, image_data, fitsinfo, mean_beam)))
+            TASKS.append((process_contour,(contour, image_data, fitsinfo, noise_out)))
     task_queue = Queue()
     done_queue = Queue()
     # Submit tasks

@@ -35,6 +35,7 @@ bokeh = { version = "*", optional = true}
 photutils = { version = "*", optional = true}
 pytest = { version = "*", optional=true }
 pytest-flake8 = { version = "*", optional=true }
+scikit-image = { version = "*", optional = true}
 
 [build-system]
 requires = ["setuptools", "poetry-core"]

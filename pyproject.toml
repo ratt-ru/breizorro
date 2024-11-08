@@ -41,9 +41,8 @@ requires = ["setuptools", "poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.extras]
-all = ["bokeh", "photutils"]
+all = ["bokeh", "photutils", "scikit-image"]
 gui = ["bokeh"]
-catalog = ["photutils"]
 testing = ["pytest", "pytest-flake8"]
 
 [tool.poetry.group.tests]

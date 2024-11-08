@@ -24,9 +24,6 @@ from scipy.ndimage.measurements import label, find_objects
 import scipy.special
 import scipy.ndimage
 
-from skimage.draw import polygon as skimage_polygon
-from skimage.measure import find_contours
-
 from breizorro.utils import get_source_size, format_source_coordinates, deg2ra, deg2dec
 from breizorro.utils import get_image_data, fitsInfo, calculate_beam_area
 
@@ -353,6 +350,11 @@ def main():
         sys.exit(1)
 
     if args.outcatalog or args.outregion:
+        try:
+            from skimage.measure import find_contours
+        except ImportError:
+            LOGGER.info('pip install breizorro[all] to use cataloguing feature.')
+            exit(1)
         contours = find_contours(mask_image, 0.5)
         polygon_regions = []
         for contour in contours:

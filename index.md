@@ -74,7 +74,7 @@ breizorro -r circinus-MFS-image.fits --sum-peak 500
 
 # Region Generation and Manipulation
 
-Breizorro makes it easier to create and work with regions using image masks. It includes labeling, eliminating, extracting, and filtering regions (islands) based on user-specified criteria. Users can refine their regions of interest using techniques such as erosion, dilation, hole-filling, binary masking, and inversion.
+Breizorro makes it easier to create and work with regions using image masks. It includes labelling, eliminating, extracting, and filtering regions (islands) based on user-specified criteria. Users can refine their regions of interest using techniques such as erosion, dilation, hole-filling, binary masking, and inversion.
 
 ```
 breizorro -r circinus-MFS-image.fits --save-regions circinus.reg
@@ -91,43 +91,37 @@ breizorro -r circinus-MFS-image.fits --merge west.reg --dilate 1 --fill-holes
 
 # Cataloguing and Visualization
 
-Breizorro enables catalog generation from extracted regions, saving source properties to an ASCII/text
-file.
+Breizorro enables catalogue generation from extracted regions, saving source properties to an ASCII/text file.
+This is particularly useful for analyzing fields dominated by point sources.
+By efficiently parameterizing and cataloguing compact sources, Breizorro enables rapid cross-matching.
 
 ```
-breizorro -r circinus-MFS-image.fits --save-catalog circinus.txt
+breizorro -r deep2-MFS-image.fits --save-catalog deep2.txt
 ```
 
 ```
-# processing fits image: circinus-MFS-image.fits
-# mean beam size (arcsec): 37.97
-# original image peak flux (Jy/beam): 0.768315315246582
-# noise out (μJy/beam): 737.33
-# cutt-off flux (mJy/beam): 4.79
-# freq0 (Hz): 1419944335.9375
-# number of sources detected: 35
+# processing fits image: deep2-MFS-image.fits
+# mean beam size (arcsec): 6.31 
+# original image peak flux (Jy/beam): 0.023107271641492844 
+# noise out (µJy/beam): 51.62 
+# cutt-off flux  (mJy/beam): 0.52 
+# freq0 (Hz): 1049833007.8125 
+# number of sources detected: 100 
 #
 #format: name ra_d dec_d i i_err emaj_s emin_s pa_d
-src0 -147.88904620760084 -65.52043870236054 0.00468 0.0001 50.04 0.0 177.71
-src1 -147.84162114219356 -65.44040921224196 0.00047 0.0001 0.0 0.0 0.0
-src2 -147.7980562104931 -65.39402001087845 0.00089 0.0001 0.0 0.0 0.0
-src3 -147.74069959466678 -65.08592423258469 0.0082 0.0001 51.61 0.0 144.46
-src4 -147.6583486798732 -65.28753961408073 0.09922 0.0001 86.58 0.0 -173.37
-src5 -147.59829620974554 -65.28104296056243 0.00629 0.0001 47.07 0.0 167.74
-src6 -147.51788583319714 -65.72316001301358 0.06639 0.0001 71.47 0.0 162.07
-src7 -147.49179712006742 -64.88584736668952 0.00092 0.0001 0.0 0.0 0.0
-src8 -147.42970139783463 -65.65050232604096 0.00069 0.0001 0.0 0.0 0.0
-src9 -147.4293961973031 -65.44158144271519 0.00134 0.0001 0.0 0.0 0.0
-src10 -147.28370646739054 -65.42936506202037 9e-05 0.0001 0.0 0.0 0.0
+src0 60.64975237181635 -79.86348735299585 0.00369 0.0001 11.66 0.0 120.96
+src1 60.67140679629887 -80.36126947232378 7e-05 0.0001 0.0 0.0 0.0
+src2 60.877334392876136 -79.76691180042988 0.00113 0.0001 8.25 0.0 104.04
+src3 60.894387589282964 -79.73476060235502 0.00023 0.0001 0.0 0.0 0.0
+src4 60.95196895741357 -79.68021884337942 0.00054 0.0001 0.0 0.0 0.0
+src5 61.00657438220518 -80.17745581694626 0.00018 0.0001 0.0 0.0 0.0
+src6 61.04136845645677 -80.48097816446368 0.00032 0.0001 0.0 0.0 0.0
+src7 61.061502553348895 -79.93907167920088 0.01435 0.0001 21.54 0.0 111.8
+src8 61.18650068905602 -80.40952881341589 0.00027 0.0001 0.0 0.0 0.0
+src9 61.32594143681846 -79.91488530476678 7e-05 0.0001 0.0 0.0 0.0
+src10 61.47462421089555 -79.96912396162651 9e-05 0.0001 0.0 0.0 0.0
+src11 61.56419377531346 -80.18249455745902 0.0022 0.0001 10.77 0.0 158.2
 ```
-
-```
-breizorro -r circinus-MFS-image.fits --save-catalog circinus.txt --gui
-```
-
-![Screenshot 2024-09-11 100116](https://github.com/user-attachments/assets/79d3ece6-5d96-48a1-a06e-fbae2987d333)
-
-For a live demo of the viewer, visit: [breiz-viewer](breizorro.html)
 
 # Contributors
 

@@ -1,0 +1,120 @@
+opts:
+  log:
+    dir: logs/log-{config.run.datetime}
+    name: log-{info.taskname}
+    nest: 10
+    symlink: log
+
+cabs:
+  breizorro:
+    info: "Mask creation and manipulation for radio astronomy images (https://github.com/ratt-ru/breizorro)"
+    command: breizorro
+    inputs:
+      restored_image:
+        info: "Restored image file from which to build the mask"
+        dtype: File
+        required: false
+      mask_image:
+        info: "Input mask file(s). Either restored-image or mask-image must be specified."
+        dtype: File
+        required: false
+      threshold:
+        info: "Sigma threshold for masking (default = 6.5)"
+        dtype: float
+        required: false
+        default: 6.5
+      boxsize:
+        info: "Box size over which to compute stats (default = 50)"
+        dtype: int
+        required: false
+        default: 50
+      savenoise:
+        info: "Export noise image as FITS file"
+        dtype: bool
+        required: false
+        default: false
+      merge:
+        info: "Merge one or more masks or region files"
+        dtype: list[File]
+        required: false
+      subtract:
+        info: "Subtract one or more masks or region files"
+        dtype: list[File]
+        required: false
+      number_islands:
+        info: "Number the islands detected"
+        dtype: bool
+        required: false
+        default: false
+      remove_islands:
+        info: "Remove islands from input mask (list by number or coordinates)"
+        dtype: list[str]
+        required: false
+      ignore_missing_islands:
+        info: "Do not throw an error if an island specified by coordinates does not exist"
+        dtype: bool
+        required: false
+        default: false
+      extract_islands:
+        info: "Extract islands from input mask (list by number or coordinates)"
+        dtype: list[str]
+        required: false
+      minimum_size:
+        info: "Remove islands with areas fewer than or equal to the specified number of pixels"
+        dtype: int
+        required: false
+      make_binary:
+        info: "Replace all island numbers with 1"
+        dtype: bool
+        required: false
+        default: false
+      invert:
+        info: "Invert the mask"
+        dtype: bool
+        required: false
+        default: false
+      dilate:
+        info: "Apply dilation with a radius of R pixels"
+        dtype: int
+        required: false
+        default: 0
+      erode:
+        info: "Apply N iterations of erosion"
+        dtype: int
+        required: false
+        default: 0
+      fill_holes:
+        info: "Fill holes (closed regions) in the mask"
+        dtype: bool
+        required: false
+        default: false
+      sum_peak:
+        info: "Sum-to-peak ratio of flux islands to mask in original image"
+        dtype: float
+        required: false
+      ncpu:
+        info: "Number of processors to use for cataloging"
+        dtype: int
+        required: false
+      beam_size:
+        info: "Average beam size in arcsec if missing in the image header"
+        dtype: float
+        required: false
+      gui:
+        info: "Open mask in bokeh html gui"
+        dtype: bool
+        required: false
+        default: false
+    outputs:
+      outfile:
+        info: "Suffix for the mask image (default based on input name)"
+        dtype: File
+        required: false
+      outcatalog:
+        info: "Generate a catalog based on the region mask"
+        dtype: File
+        required: false
+      outregion:
+        info: "Generate polygon regions from the mask"
+        dtype: File
+        required: false

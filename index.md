@@ -8,50 +8,47 @@ Breizorro is a flexible software program made to simplify image analysis tasks, 
 # Parameter definition
 
 ```
-breizorro [options] --restored-image restored_image
+Usage: breizorro [OPTIONS]
 
-optional arguments:
-    -h, --help            show this help message and exit
-    -r IMAGE, --restored-image IMAGE
-                          Restored image file from which to build mask
-    -m MASK, --mask-image MASK
-                          Input mask file(s). Either --restored-image or --mask-
-                          image must be specfied.
-    -t THRESHOLD, --threshold THRESHOLD
-                          Sigma threshold for masking (default = 6.5)
-    -b BOXSIZE, --boxsize BOXSIZE
-                          Box size over which to compute stats (default = 50)
-    --savenoise           Enable to export noise image as FITS file (default=do
-                          not save noise image)
-    --merge MASK(s)|REG(s) [MASK(s)|REG(s) ...]
-                          Merge in one or more masks or region files
-    --subtract MASK(s)|REG(s) [MASK(s)|REG(s) ...]
-                          Subract one or more masks or region files
-    --number-islands      Number the islands detected (default=do not number
-                          islands)
-    --remove-islands N|COORD [N|COORD ...]
-                          List of islands to remove from input mask. e.g.
-                          --remove-islands 1 18 20 20h10m13s,14d15m20s
-    --ignore-missing-islands
-                          If an island specified by coordinates does not exist,
-                          do not throw an error
-    --extract-islands N|COORD [N|COORD ...]
-                          List of islands to extract from input mask. e.g.
-                          --extract-islands 1 18 20 20h10m13s,14d15m20s
-    --minimum-size MINSIZE
-                          Remove islands that have areas fewer than or equal to
-                          the specified number of pixels
-    --make-binary         Replace all island numbers with 1
-    --invert              Invert the mask
-    --dilate R            Apply dilation with a radius of R pixels
-    --erode N             Apply N iterations of erosion
-    --fill-holes          Fill holes (i.e. entirely closed regions) in mask
-    --sum-peak SUM_PEAK   Sum to peak ratio of flux islands to mask in original
-                          image.e.g. --sum-peak 100 will mask everything with a
-                          ratio above 100
-    -o OUTFILE, --outfile OUTFILE
-                          Suffix for mask image (default based on input name
-    --gui                 Open mask in gui.
+Options:
+  --restored-image PATH           Restored image file from which to build the
+                                  mask
+  --mask-image PATH               Input mask file(s). Either restored-image or
+                                  mask-image must be specified.
+  --threshold FLOAT               Sigma threshold for masking (default = 6.5)
+  --boxsize INTEGER               Box size over which to compute stats
+                                  (default = 50)
+  --savenoise / --no-savenoise    Export noise image as FITS file
+  --merge TEXT                    Merge one or more masks or region files
+  --subtract TEXT                 Subtract one or more masks or region files
+  --number-islands / --no-number-islands
+                                  Number the islands detected
+  --remove-islands TEXT           Remove islands from input mask (list by
+                                  number or coordinates)
+  --ignore-missing-islands / --no-ignore-missing-islands
+                                  Do not throw an error if an island specified
+                                  by coordinates does not exist
+  --extract-islands TEXT          Extract islands from input mask (list by
+                                  number or coordinates)
+  --minimum-size INTEGER          Remove islands with areas fewer than or
+                                  equal to the specified number of pixels
+  --make-binary / --no-make-binary
+                                  Replace all island numbers with 1
+  --invert / --no-invert          Invert the mask
+  --dilate INTEGER                Apply dilation with a radius of R pixels
+  --erode INTEGER                 Apply N iterations of erosion
+  --fill-holes / --no-fill-holes  Fill holes (closed regions) in the mask
+  --sum-peak FLOAT                Sum-to-peak ratio of flux islands to mask in
+                                  original image
+  --ncpu INTEGER                  Number of processors to use for cataloging
+  --beam-size FLOAT               Average beam size in arcsec if missing in
+                                  the image header
+  --gui / --no-gui                Open mask in bokeh html gui
+  --outfile PATH                  Suffix for the mask image (default based on
+                                  input name)
+  --outcatalog PATH               Generate a catalog based on the region mask
+  --outregion PATH                Generate polygon regions from the mask
+  --help                          Show this message and exit.
 ```
 
 
@@ -77,7 +74,7 @@ breizorro -r circinus-MFS-image.fits --sum-peak 500
 Breizorro makes it easier to create and work with regions using image masks. It includes labelling, eliminating, extracting, and filtering regions (islands) based on user-specified criteria. Users can refine their regions of interest using techniques such as erosion, dilation, hole-filling, binary masking, and inversion.
 
 ```
-breizorro -r circinus-MFS-image.fits --save-regions circinus.reg
+breizorro -r circinus-MFS-image.fits --outregion circinus.reg
 ```
 
 ![mypipelinerun_circinus_p3_3-MFS-image fits-image-2024-09-11-10-38-15](https://github.com/user-attachments/assets/14f435e1-6234-4515-9597-c3002a644975)
@@ -96,7 +93,7 @@ This is particularly useful for analyzing fields dominated by point sources.
 By efficiently parameterizing and cataloguing compact sources, Breizorro enables rapid cross-matching.
 
 ```
-breizorro -r deep2-MFS-image.fits --save-catalog deep2.txt
+breizorro -r deep2-MFS-image.fits --outcatalog deep2.txt
 ```
 
 ```

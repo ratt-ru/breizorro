@@ -64,4 +64,4 @@ jobs:
   
     - name: Test command
       run: |
-        poetry run breizorro -h
+        poetry run breizorro --help

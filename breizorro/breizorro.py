@@ -310,7 +310,7 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
         shutil.copyfile(input_file, out_mask_fits)  # to provide a template
         flush_fits(mask_image, out_mask_fits, mask_header)
         LOGGER.info("Done")
-        sys.exit(1)
+        sys.exit(0)
 
     if outcatalog or outregion:
         try:

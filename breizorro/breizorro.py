@@ -118,33 +118,7 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
     from pkg_resources import get_distribution
     _version = get_distribution('breizorro').version
     LOGGER.info(f"Version: {_version}")
-
     LOGGER.info("Usage: breizorro --help")
-
-    # Example usage of the parameters
-    LOGGER.info(f"Restored Image: {restored_image}")
-    LOGGER.info(f"Mask Image: {mask_image}")
-    LOGGER.info(f"Threshold: {threshold}")
-    LOGGER.info(f"Box Size: {boxsize}")
-    LOGGER.info(f"Save Noise: {savenoise}")
-    LOGGER.info(f"Merge: {merge}")
-    LOGGER.info(f"Subtract: {subtract}")
-    LOGGER.info(f"Number Islands: {number_islands}")
-    LOGGER.info(f"Remove Islands: {remove_islands}")
-    LOGGER.info(f"Ignore Missing Islands: {ignore_missing_islands}")
-    LOGGER.info(f"Extract Islands: {extract_islands}")
-    LOGGER.info(f"Minimum Size: {minimum_size}")
-    LOGGER.info(f"Make Binary: {make_binary}")
-    LOGGER.info(f"Invert: {invert}")
-    LOGGER.info(f"Dilate: {dilate}")
-    LOGGER.info(f"Erode: {erode}")
-    LOGGER.info(f"Fill Holes: {fill_holes}")
-    LOGGER.info(f"Sum Peak: {sum_peak}")
-    LOGGER.info(f"NCPU: {ncpu}")
-    LOGGER.info(f"Beam Size: {beam_size}")
-    LOGGER.info(f"Outfile: {outfile}")
-    LOGGER.info(f"Save Catalog: {outcatalog}")
-    LOGGER.info(f"Save Regions: {outregion}")
 
     if restored_image and mask_image:
         LOGGER.error("Either --restored-image or --mask-image must be specified, but not both")
@@ -202,8 +176,9 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
             try:
                 regs = regions.Regions.read(filename)
             except:
-                LOGGER.error(f"{merge} is neither a FITS file not a regions file")
-                raise
+                msg = f"{merge} is neither a FITS file not a regions file"
+                LOGGER.error(msg)
+                raise(msg)
         return fits, regs
 
     if merge:

@@ -32,13 +32,13 @@ cabs:
         dtype: List[File]
         metavar: "MASK(s)|REG(s)"
         policies:
-          repeat: ' '
+          repeat: '[]'
       subtract:
         info: "Subtract one or more masks or region files"
         dtype: List[File]
         metavar: "MASK(s)|REG(s)"
         policies:
-          repeat: list
+          repeat: '[]'
       number_islands:
         info: "Number the islands detected"
         dtype: bool
@@ -48,7 +48,7 @@ cabs:
         info: "Remove islands from input mask (list by number or coordinates)"
         dtype: List[str]
         policies:
-          repeat: list
+          repeat: ' '
       ignore_missing_islands:
         info: "Do not throw an error if an island specified by coordinates does not exist"
         dtype: bool
@@ -58,7 +58,7 @@ cabs:
         dtype: List[str]
         metavar: "N|COORD"
         policies:
-          repeat: list
+          repeat: ' '
       minimum_size:
         info: "Remove islands with areas fewer than or equal to the specified number of pixels"
         dtype: int

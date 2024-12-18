@@ -374,9 +374,9 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
         LOGGER.info("Loading Gui ...")
         display(input_file, mask_image, outcatalog, source_list)
 
-    LOGGER.info(f"Enforcing that mask to binary")
-    mask_image = mask_image!=0
-    mask_header['BUNIT'] = 'mask'
+        LOGGER.info(f"Enforcing that mask to binary")
+        mask_image = mask_image!=0
+        mask_header['BUNIT'] = 'mask'
 
     shutil.copyfile(input_file, out_mask_fits)  # to provide a template
     flush_fits(mask_image, out_mask_fits, mask_header)

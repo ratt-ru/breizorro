@@ -80,9 +80,9 @@ def make_noise_map(restored_image, boxsize):
 def resolve_island(isl_spec, mask_image, wcs, ignore_missing=False):
     if re.match("^\d+$", isl_spec):
         return int(isl_spec)
-    elif ',' not in isl_spec:
+    elif ':' not in isl_spec:
         raise ValueError(f"invalid island specification: {isl_spec}")
-    c = SkyCoord(*isl_spec.split(',', 1))
+    c = SkyCoord(*isl_spec.split(':', 1))
     x, y = wcs.world_to_pixel(c)
     x = round(float(x))
     y = round(float(y))

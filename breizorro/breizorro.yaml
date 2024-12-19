@@ -42,20 +42,20 @@ cabs:
       number_islands:
         info: "Number the islands detected"
         dtype: bool
-        metavar: "N|COORD"
         default: false
       remove_islands:
-        info: "Remove islands from input mask (list by number or coordinates)"
-        dtype: List[str]
+        info: "Remove islands from input mask (list by number or coordinates) e.g. --remove-islands 1,18,20,20h10m13s:14d15m20s"
+        dtype: List[Union[int, str]]
+        metavar: "N|COORD"
         policies:
-          repeat: ' '
+          repeat: '[]'
       ignore_missing_islands:
         info: "Do not throw an error if an island specified by coordinates does not exist"
         dtype: bool
         default: false
       extract_islands:
-        info: "Extract islands from input mask (list by number or coordinates)"
-        dtype: List[str]
+        info: "Extract islands from input mask (list by number or coordinates) e.g. --extract-islands 1,18,20,20h10m13s:14d15m20s"
+        dtype: List[Union[int, str]]
         metavar: "N|COORD"
         policies:
           repeat: ' '

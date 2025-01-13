@@ -1,0 +1,111 @@
+cabs:
+  breizorro:
+    info: "Mask creation and manipulation for radio astronomy images (https://github.com/ratt-ru/breizorro)"
+    command: breizorro
+    inputs:
+      restored-image:
+        info: "Restored image file from which to build the mask"
+        dtype: File
+        metavar: IMAGE
+        abbreviation: r
+      mask-image:
+        info: "Input mask file(s). Either restored-image or mask-image must be specified."
+        dtype: File
+        abbreviation: m
+        metavar: MASK
+      threshold:
+        info: "Sigma threshold for masking (default = 6.5)"
+        dtype: float
+        default: 6.5
+        abbreviation: t
+      boxsize:
+        info: "Box size over which to compute stats (default = 50)"
+        dtype: int
+        default: 50
+        abbreviation: b
+      savenoise:
+        info: "Export noise image as FITS file"
+        dtype: bool
+        default: false
+      merge:
+        info: "Merge one or more masks or region files"
+        dtype: List[File]
+        metavar: "MASK(s)|REG(s)"
+        policies:
+          repeat: '[]'
+      subtract:
+        info: "Subtract one or more masks or region files"
+        dtype: List[File]
+        metavar: "MASK(s)|REG(s)"
+        policies:
+          repeat: '[]'
+      number-islands:
+        info: "Number the islands detected"
+        dtype: bool
+        default: false
+      remove-islands:
+        info: "Remove islands from input mask (list by number or coordinates) e.g. --remove-islands 1,18,20,20h10m13s:14d15m20s"
+        dtype: List[Union[int, str]]
+        metavar: "N|COORD"
+        policies:
+          repeat: '[]'
+      ignore-missing-islands:
+        info: "Do not throw an error if an island specified by coordinates does not exist"
+        dtype: bool
+        default: false
+      extract-islands:
+        info: "Extract islands from input mask (list by number or coordinates) e.g. --extract-islands 1,18,20,20h10m13s:14d15m20s"
+        dtype: List[Union[int, str]]
+        metavar: "N|COORD"
+        policies:
+          repeat: ' '
+      minimum-size:
+        info: "Remove islands with areas fewer than or equal to the specified number of pixels"
+        dtype: int
+      make-binary:
+        info: "Replace all island numbers with 1"
+        dtype: bool
+        default: false
+      invert:
+        info: "Invert the mask"
+        dtype: bool
+        default: false
+      dilate:
+        info: "Apply dilation with a radius of R pixels"
+        dtype: int
+        metavar: "R"
+        default: 0
+      erode:
+        info: "Apply N iterations of erosion"
+        dtype: int
+        metavar: "N"
+        default: 0
+      fill-holes:
+        info: "Fill holes (closed regions) in the mask"
+        dtype: bool
+        default: false
+      sum-peak:
+        info: "Sum-to-peak ratio of flux islands to mask in original image"
+        dtype: float
+      ncpu:
+        info: "Number of processors to use for cataloging"
+        dtype: int
+        abbreviation: j
+      beam-size:
+        info: "Average beam size in arcsec if missing in the image header"
+        dtype: float
+      gui:
+        info: "Open mask in bokeh html gui"
+        dtype: bool
+        default: false
+    outputs:
+      outfile:
+        info: "Suffix for the mask image (default based on input name)"
+        dtype: File
+        abbreviation: o
+      outcatalog:
+        info: "Generate a catalog based on the region mask"
+        dtype: File
+      outregion:
+        info: "Generate polygon regions from the mask"
+        dtype: File

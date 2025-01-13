@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "breizorro"
-version = "0.1.2"
+version = "0.1.3"
 description = "Creates a binary mask given a FITS image"
 authors = ["Ian Heywood & RATT <ian.heywood@phyics.ox.ac.uk>"]
 readme = "README.rst"
@@ -24,22 +24,36 @@ packages = [
 breizorro = "breizorro.main:driver"
 
 [tool.poetry.dependencies]
-python = "^3.8"
-astropy = "*"
-numpy = "*"
+python = ">=3.8, <3.13"
+astropy = [
+    { version = ">=6.1.0", python = ">=3.12"},
+    { version = "<6.1.0", python = ">=3.8, <3.12"}
+]
+numpy = [
+    { version = ">=2.0.0", python = ">=3.12"},
+    { version = "<2.0.0", python = ">=3.8, <3.12"}
+]
+omegaconf = "*"
 regions = "*"
-scipy = "*"
+scipy = [
+    { version = ">=1.13.0", python = ">=3.12"},
+    { version = "<1.13.0", python = ">=3.8, <3.12"}
+]
+stimela = ">=2.0"
 
 # Optional dependencies start here
 bokeh = { version = "*", optional = true}
+photutils = { version = "*", optional = true}
 pytest = { version = "*", optional=true }
 pytest-flake8 = { version = "*", optional=true }
+scikit-image = { version = "*", optional = true}
 
 [build-system]
 requires = ["setuptools", "poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.extras]
+all = ["bokeh", "photutils", "scikit-image"]
 gui = ["bokeh"]
 testing = ["pytest", "pytest-flake8"]
 

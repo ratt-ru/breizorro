@@ -3,12 +3,12 @@ cabs:
     info: "Mask creation and manipulation for radio astronomy images (https://github.com/ratt-ru/breizorro)"
     command: breizorro
     inputs:
-      restored_image:
+      restored-image:
         info: "Restored image file from which to build the mask"
         dtype: File
         metavar: IMAGE
         abbreviation: r
-      mask_image:
+      mask-image:
         info: "Input mask file(s). Either restored-image or mask-image must be specified."
         dtype: File
         abbreviation: m
@@ -39,30 +39,30 @@ cabs:
         metavar: "MASK(s)|REG(s)"
         policies:
           repeat: '[]'
-      number_islands:
+      number-islands:
         info: "Number the islands detected"
         dtype: bool
         default: false
-      remove_islands:
+      remove-islands:
         info: "Remove islands from input mask (list by number or coordinates) e.g. --remove-islands 1,18,20,20h10m13s:14d15m20s"
         dtype: List[Union[int, str]]
         metavar: "N|COORD"
         policies:
           repeat: '[]'
-      ignore_missing_islands:
+      ignore-missing-islands:
         info: "Do not throw an error if an island specified by coordinates does not exist"
         dtype: bool
         default: false
-      extract_islands:
+      extract-islands:
         info: "Extract islands from input mask (list by number or coordinates) e.g. --extract-islands 1,18,20,20h10m13s:14d15m20s"
         dtype: List[Union[int, str]]
         metavar: "N|COORD"
         policies:
           repeat: ' '
-      minimum_size:
+      minimum-size:
         info: "Remove islands with areas fewer than or equal to the specified number of pixels"
         dtype: int
-      make_binary:
+      make-binary:
         info: "Replace all island numbers with 1"
         dtype: bool
         default: false
@@ -80,18 +80,18 @@ cabs:
         dtype: int
         metavar: "N"
         default: 0
-      fill_holes:
+      fill-holes:
         info: "Fill holes (closed regions) in the mask"
         dtype: bool
         default: false
-      sum_peak:
+      sum-peak:
         info: "Sum-to-peak ratio of flux islands to mask in original image"
         dtype: float
       ncpu:
         info: "Number of processors to use for cataloging"
         dtype: int
         abbreviation: j
-      beam_size:
+      beam-size:
         info: "Average beam size in arcsec if missing in the image header"
         dtype: float
       gui:

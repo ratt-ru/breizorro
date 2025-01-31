@@ -54,8 +54,8 @@ jobs:
     - name: Install breizorro
       run: poetry install
 
-    - name: Install breizorro with gui
-      run: poetry install --extras "gui"
+    - name: Install breizorro with all modules
+      run: poetry install --extras "all"
       
     - name: Install breizorro with tests
       run: poetry install --with tests --no-interaction

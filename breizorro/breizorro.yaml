@@ -58,7 +58,7 @@ cabs:
         dtype: List[Union[int, str]]
         metavar: "N|COORD"
         policies:
-          repeat: ' '
+          repeat: '[]'
       minimum-size:
         info: "Remove islands with areas fewer than or equal to the specified number of pixels"
         dtype: int

@@ -115,8 +115,10 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
          ncpu, beam_size, gui, outfile, outcatalog, outregion):
     LOGGER.info("Welcome to breizorro")
     # Get version
-    from pkg_resources import get_distribution
-    _version = get_distribution('breizorro').version
+    try:
+        _version = version("breizorro")
+    except PackageNotFoundError:
+        _version = "dev"
     LOGGER.info(f"Version: {_version}")
     LOGGER.info("Usage: breizorro --help")
 

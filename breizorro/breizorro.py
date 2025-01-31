@@ -115,6 +115,7 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
          ncpu, beam_size, gui, outfile, outcatalog, outregion):
     LOGGER.info("Welcome to breizorro")
     # Get version
+    from importlib.metadata import version, PackageNotFoundError
     try:
         _version = version("breizorro")
     except PackageNotFoundError:

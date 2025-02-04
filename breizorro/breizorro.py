@@ -184,7 +184,7 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
                 raise(msg)
         return fits, regs
 
-    if merge:
+    if isinstance(merge, list)
         for _merge in merge:
             fits, regs = load_fits_or_region(_merge)
             if fits:
@@ -197,7 +197,7 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
         mask_image = mask_image != 0
         mask_header['BUNIT'] = 'mask'
 
-    if subtract:
+    if isinstance(subtract, list):
         for _subtract in subtract:
             fits, regs = load_fits_or_region(_subtract)
             if fits:
@@ -216,14 +216,14 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
         mask_header['BUNIT'] = 'Source_ID'
         LOGGER.info(f"Number of islands: {num_features}")
     
-    if remove_islands:
+    if isinstance(remove_islands, list):
         LOGGER.info(f"Removing islands: {remove_islands}")
         for isl_spec in remove_islands:
             isl = resolve_island(isl_spec, mask_image, wcs, ignore_missing=ignore_missing_islands)
             if isl != None:
                 mask_image[mask_image == isl] = 0
 
-    if extract_islands:
+    if isinstance(extract_islands, list):
         LOGGER.info(f"Extracting islands: {extract_islands}")
         new_mask_image = np.zeros_like(mask_image)
         for isl_spec in extract_islands:

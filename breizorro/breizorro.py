@@ -184,7 +184,7 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
                 raise(msg)
         return fits, regs
 
-    if isinstance(merge, list)
+    if isinstance(merge, list):
         for _merge in merge:
             fits, regs = load_fits_or_region(_merge)
             if fits:

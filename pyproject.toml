@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "breizorro"
-version = "0.1.4"
+version = "0.2.0"
 description = "Creates a binary mask given a FITS image"
 authors = ["Ian Heywood & RATT <ian.heywood@phyics.ox.ac.uk>"]
 readme = "README.rst"

@@ -100,12 +100,21 @@ cabs:
         default: false
     outputs:
       outfile:
-        info: "Suffix for the mask image (default based on input name)"
+        info: "The output mask image (default based on input name)"
         dtype: File
+        default: =IFSET(current.restored-image, STRIPEXT(current.restored-image) + '.mask.fits', IFSET(current.mask-image, STRIPEXT(current.mask-image) + '.out.fits', ERROR("Either restored-image or mask-image must be specified.")))
+        required: false
         abbreviation: o
+        suppress_cli_default: true
       outcatalog:
         info: "Generate a catalog based on the region mask"
         dtype: File
+        required: false
+        default: ''
+        suppress_cli_default: true
       outregion:
         info: "Generate polygon regions from the mask"
         dtype: File
+        required: false
+        default: ''
+        suppress_cli_default: true

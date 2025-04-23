@@ -130,8 +130,9 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
 
     # define input file, and get its name and extension
     input_file = restored_image or mask_image
-    name = '.'.join(input_file.split('.')[:-1])
-    ext = input_file.split('.')[-1]
+    if input_file:
+        name = '.'.join(input_file.split('.')[:-1])
+        ext = input_file.split('.')[-1]
 
     # first, load or generate mask
     if restored_image:
@@ -162,7 +163,6 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
 
         out_mask_fits = outfile or f"{name}.out.{ext}"
     else:
-        LOGGER.error("Either --restored-image or --mask-image must be specified")
         sys.exit(1)
 
     wcs = WCS(mask_header)

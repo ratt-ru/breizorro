@@ -110,11 +110,7 @@ cabs:
         info: "Generate a catalog based on the region mask"
         dtype: File
         required: false
-        default: ''
-        suppress_cli_default: true
       outregion:
         info: "Generate polygon regions from the mask"
         dtype: File
         required: false
-        default: ''
-        suppress_cli_default: true

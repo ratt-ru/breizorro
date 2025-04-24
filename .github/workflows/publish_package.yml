@@ -9,7 +9,7 @@ on:
       - '**'
 
 env:
-  POETRY_VERSION: 1.4.0
+  POETRY_VERSION: 2.0.1
 
 jobs:
   deploy:
@@ -23,7 +23,7 @@ jobs:
       - name: Set up Python 3
         uses: actions/setup-python@v4
         with:
-          python-version: '3.x'
+          python-version: '3.12'
 
       - name: Cache Installations
         id: cache-installs

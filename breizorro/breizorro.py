@@ -78,7 +78,7 @@ def make_noise_map(restored_image, boxsize):
 
 
 def resolve_island(isl_spec, mask_image, wcs, ignore_missing=False):
-    if re.match("^\d+$", isl_spec):
+    if re.match(r"^\d+$", isl_spec):
         return int(isl_spec)
     elif ':' not in isl_spec:
         raise ValueError(f"invalid island specification: {isl_spec}")
@@ -115,8 +115,11 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
          ncpu, beam_size, gui, outfile, outcatalog, outregion):
     LOGGER.info("Welcome to breizorro")
     # Get version
-    from pkg_resources import get_distribution
-    _version = get_distribution('breizorro').version
+    from importlib.metadata import version, PackageNotFoundError
+    try:
+        _version = version("breizorro")
+    except PackageNotFoundError:
+        _version = "dev"
     LOGGER.info(f"Version: {_version}")
     LOGGER.info("Usage: breizorro --help")
 
@@ -127,8 +130,9 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
 
     # define input file, and get its name and extension
     input_file = restored_image or mask_image
-    name = '.'.join(input_file.split('.')[:-1])
-    ext = input_file.split('.')[-1]
+    if input_file:
+        name = '.'.join(input_file.split('.')[:-1])
+        ext = input_file.split('.')[-1]
 
     # first, load or generate mask
     if restored_image:
@@ -159,7 +163,6 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
 
         out_mask_fits = outfile or f"{name}.out.{ext}"
     else:
-        LOGGER.error("Either --restored-image or --mask-image must be specified")
         sys.exit(1)
 
     wcs = WCS(mask_header)
@@ -181,7 +184,7 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
                 raise(msg)
         return fits, regs
 
-    if merge:
+    if isinstance(merge, list):
         for _merge in merge:
             fits, regs = load_fits_or_region(_merge)
             if fits:
@@ -194,7 +197,7 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
         mask_image = mask_image != 0
         mask_header['BUNIT'] = 'mask'
 
-    if subtract:
+    if isinstance(subtract, list):
         for _subtract in subtract:
             fits, regs = load_fits_or_region(_subtract)
             if fits:
@@ -213,14 +216,14 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
         mask_header['BUNIT'] = 'Source_ID'
         LOGGER.info(f"Number of islands: {num_features}")
     
-    if remove_islands:
+    if isinstance(remove_islands, list):
         LOGGER.info(f"Removing islands: {remove_islands}")
         for isl_spec in remove_islands:
             isl = resolve_island(isl_spec, mask_image, wcs, ignore_missing=ignore_missing_islands)
             if isl != None:
                 mask_image[mask_image == isl] = 0
 
-    if extract_islands:
+    if isinstance(extract_islands, list):
         LOGGER.info(f"Extracting islands: {extract_islands}")
         new_mask_image = np.zeros_like(mask_image)
         for isl_spec in extract_islands:

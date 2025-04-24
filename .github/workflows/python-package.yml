@@ -5,12 +5,16 @@ name: Python package
 
 on:
   push:
-    branches: [ main ]
+    branches:
+    - master
+    tags:
+    - "*"
   pull_request:
-    branches: [ main ]
+  schedule:
+    - cron: '30 2 * * 1' # Every Monday @ 2h30am UTC
 
 env:
-  POETRY_VERSION: 1.4.0
+  POETRY_VERSION: 2.0.1
 
 jobs:
   build:
@@ -35,9 +39,10 @@ jobs:
         key: install-${{ env.INSTALL_CACHE_HASH }}-2
 
     - name: Install Poetry
-      if: steps.cache-installs.outputs.cache-hit != 'true'
-      run: |
-        curl -sSL https://install.python-poetry.org | python3 - --version ${{ env.POETRY_VERSION }}
+      uses: abatilo/actions-poetry@v3
+      with:
+        poetry-version: ${{ env.POETRY_VERSION }}
+
     - name: Test poetry
       run: poetry --version
 
@@ -49,8 +54,8 @@ jobs:
     - name: Install breizorro
       run: poetry install
 
-    - name: Install breizorro with gui
-      run: poetry install --extras "gui"
+    - name: Install breizorro with all modules
+      run: poetry install --extras "all"
       
     - name: Install breizorro with tests
       run: poetry install --with tests --no-interaction
@@ -61,7 +66,16 @@ jobs:
         poetry run flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         poetry run flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-  
+
     - name: Test command
       run: |
         poetry run breizorro --help
+
+    - name: Download test dataset
+      run: |
+        curl -L -o mypipelinerun_circinus_p3_3-MFS-image.tar "https://www.dropbox.com/scl/fi/xoaqth4jhjnx098xbegvn/mypipelinerun_circinus_p3_3-MFS-image.tar?rlkey=vdgkz2xpjgpp7v7hjxm7kg6g2&st=isg70eve&dl=1" && tar -xvf mypipelinerun_circinus_p3_3-MFS-image.tar
+
+    - name: Run end-to-end test
+      run: |
+        poetry run breizorro -r mypipelinerun_circinus_p3_3-MFS-image.fits --outfile test.mask.fits --outregion test.mask.rgn
+        poetry run breizorro -r mypipelinerun_circinus_p3_3-MFS-image.fits -t 10 --merge test.mask.fits,test.mask.rgn --remove-islands 19,21,14h16m20.3:-65d42m07 --number-islands 

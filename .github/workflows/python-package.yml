@@ -77,5 +77,5 @@ jobs:
 
     - name: Run end-to-end test
       run: |
-        poetry run breizorro -r mypipelinerun_circinus_p3_3-MFS-image.fits --outfile test.mask.fits --outregion test.mask.rgn
+        poetry run breizorro -r mypipelinerun_circinus_p3_3-MFS-image.fits --outfile test.mask.fits --outregion test.mask.rgn --outcatalog test.csv
         poetry run breizorro -r mypipelinerun_circinus_p3_3-MFS-image.fits -t 10 --merge test.mask.fits,test.mask.rgn --remove-islands 19,21,14h16m20.3:-65d42m07 --number-islands 

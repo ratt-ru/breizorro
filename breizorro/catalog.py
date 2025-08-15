@@ -41,7 +41,7 @@ def process_contour(contour, image_data, fitsinfo, noise_out):
         beam_error = np.sqrt(source_beams) * noise_out
         flux_density_error = np.sqrt(ten_pc_error**2 + beam_error**2)  # combined error
         # Calculate weighted centroid
-        _centroids = centroids.centroid_2dg(data)
+        _centroids = centroids.centroid_com(data)
         centroid_x, centroid_y = _centroids
         ra, dec = wcs.all_pix2world(centroid_x, centroid_y, 0)
         # Ensure RA is positive
@@ -56,6 +56,7 @@ def process_contour(contour, image_data, fitsinfo, noise_out):
         # Dummy source to be eliminated
         lon = -np.inf
         catalog_out = ''
+    print(catalog_out)
     return (ra, catalog_out, use_max)
 
 
@@ -105,4 +106,18 @@ def multiprocess_contours(contours, image_data, fitsinfo, noise_out, ncpu=None):
 
     ra_sorted_list = sorted(source_list, key = itemgetter(0))
 
+    return ra_sorted_list
+
+def multiprocess_contours1(contours, image_data, fitsinfo, noise_out, ncpu=None):
+    import dask.bag as db
+
+    def wrapper(contour):
+        return process_contour(contour, image_data, fitsinfo, noise_out)
+
+    contours_bag = db.from_sequence(contours, npartitions=ncpu or 4)
+    results = contours_bag.map(wrapper).compute()
+
+    # Filter and sort
+    source_list = [r for r in results if r[0] > -np.inf]
+    ra_sorted_list = sorted(source_list, key=itemgetter(0))
     return ra_sorted_list

@@ -49,6 +49,14 @@ jobs:
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         uv run flake8 breizorro --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
+    - name: Lint with Ruff
+      run: |
+        uv run ruff check breizorro --select=E,W,F,I,N --show-fixes
+
+    - name: Format check with Ruff
+      run: |
+        uv run ruff format breizorro --check --line-length 100
+
     - name: Download test dataset (real FITS file)
       run: |
         curl -L -o mypipelinerun_circinus_p3_3-MFS-image.tar "https://www.dropbox.com/scl/fi/xoaqth4jhjnx098xbegvn/mypipelinerun_circinus_p3_3-MFS-image.tar?rlkey=vdgkz2xpjgpp7v7hjxm7kg6g2&st=isg70eve&dl=1" && tar -xvf mypipelinerun_circinus_p3_3-MFS-image.tar

@@ -1,20 +1,27 @@
+from multiprocessing import Process, Queue
+from operator import attrgetter, itemgetter
+
 import numpy as np
 from photutils import centroids
-from multiprocessing import Process, Queue
-from operator import itemgetter, attrgetter
-from regions import PolygonSkyRegion, PolygonPixelRegion
+from regions import PolygonPixelRegion, PolygonSkyRegion
 
-from breizorro.utils import get_source_size, deg2ra, deg2dec
-from breizorro.utils import fitsInfo, calculate_beam_area
+from breizorro.utils import (
+    calculate_beam_area,
+    deg2dec,
+    deg2ra,
+    fitsInfo,
+    get_source_size,
+)
+
 
 def process_contour(contour, image_data, fitsinfo, noise_out):
     use_max = 0
     lon = 0
-    pix_size = fitsinfo['ddec'] * 3600.0
-    bmaj, bmin,_ = np.array(fitsinfo['b_size']) * 3600.0
+    pix_size = fitsinfo["ddec"] * 3600.0
+    bmaj, bmin, _ = np.array(fitsinfo["b_size"]) * 3600.0
     mean_beam = 0.5 * (bmaj + bmin)
-    pix_beam = calculate_beam_area(bmaj/2, bmin/2, pix_size)
-    wcs = fitsinfo['wcs']
+    pix_beam = calculate_beam_area(bmaj / 2, bmin / 2, pix_size)
+    wcs = fitsinfo["wcs"]
     while len(wcs.array_shape) > 2:
         wcs = wcs.dropaxis(len(wcs.array_shape) - 1)
 
@@ -28,14 +35,14 @@ def process_contour(contour, image_data, fitsinfo, noise_out):
     source_beams = source_area_pix / pix_beam  # Number of beams covering the source
     try:
         data = mask * image_data
-        nndata = data # np.flip(data, axis=0)
-        #nndata = nndata[~np.isnan(nndata)]
-        total_flux = np.sum(nndata[nndata != -0.0])/pix_beam
-        peak_flux = nndata.max()/pix_beam
-    except:
+        nndata = data  # np.flip(data, axis=0)
+        # nndata = nndata[~np.isnan(nndata)]
+        total_flux = np.sum(nndata[nndata != -0.0]) / pix_beam
+        peak_flux = nndata.max() / pix_beam
+    except (ValueError, ZeroDivisionError):
         peak_flux = 0.0
     if total_flux:
-        total_peak_ratio =  np.abs((total_flux - peak_flux) / total_flux)
+        total_peak_ratio = np.abs((total_flux - peak_flux) / total_flux)
         # Flux density error estimation
         ten_pc_error = 0.1 * total_flux  # a 10% error term as an additional conservative estimate
         beam_error = np.sqrt(source_beams) * noise_out
@@ -48,21 +55,23 @@ def process_contour(contour, image_data, fitsinfo, noise_out):
         if ra < 0:
             ra += 360
         source_flux = (round(total_flux, 5), round(flux_density_error, 5))
-        source_size = get_source_size(contour, pix_size, mean_beam, image_data, total_peak_ratio, _centroids)
-        #source_pos = format_source_coordinates(ra, dec)
+        source_size = get_source_size(
+            contour, pix_size, mean_beam, image_data, total_peak_ratio, _centroids
+        )
+        # source_pos = format_source_coordinates(ra, dec)
         source = (ra, dec) + source_flux + source_size
-        catalog_out = ' '.join(str(src_prop) for src_prop in source)
+        catalog_out = " ".join(str(src_prop) for src_prop in source)
     else:
         # Dummy source to be eliminated
-        lon = -np.inf
-        catalog_out = ''
+
+        catalog_out = ""
     return (ra, catalog_out, use_max)
 
 
 def multiprocess_contours(contours, image_data, fitsinfo, noise_out, ncpu=None):
 
     def contour_worker(input, output):
-        for func, args in iter(input.get, 'STOP'):
+        for func, args in iter(input.get, "STOP"):
             result = func(*args)
             output.put(result)
 
@@ -71,8 +80,9 @@ def multiprocess_contours(contours, image_data, fitsinfo, noise_out, ncpu=None):
     if not ncpu:
         try:
             import multiprocessing
-            ncpu =  multiprocessing.cpu_count()
-        except:
+
+            ncpu = multiprocessing.cpu_count()
+        except (RuntimeError, NotImplementedError):
             pass
     TASKS = []
     for i in range(len(contours)):
@@ -83,7 +93,7 @@ def multiprocess_contours(contours, image_data, fitsinfo, noise_out, ncpu=None):
             for j in range(len(contour)):
                 x.append(contour[j][0])
                 y.append(contour[j][1])
-            TASKS.append((process_contour,(contour, image_data, fitsinfo, noise_out)))
+            TASKS.append((process_contour, (contour, image_data, fitsinfo, noise_out)))
     task_queue = Queue()
     done_queue = Queue()
     # Submit tasks
@@ -101,8 +111,8 @@ def multiprocess_contours(contours, image_data, fitsinfo, noise_out, ncpu=None):
             num_max += catalog_out[2]
     # Tell child processes to stop
     for i in range(ncpu):
-        task_queue.put('STOP')
+        task_queue.put("STOP")
 
-    ra_sorted_list = sorted(source_list, key = itemgetter(0))
+    ra_sorted_list = sorted(source_list, key=itemgetter(0))
 
     return ra_sorted_list

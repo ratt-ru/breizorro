@@ -1,38 +1,39 @@
-import sys
-import numpy
-import shutil
 import logging
-import argparse
-import os.path
 import re
-import numpy as np
-
-import astropy.units as u
-from astropy.io import fits
-from astropy.wcs import WCS
-from astropy.coordinates import Angle
-from astropy.coordinates import SkyCoord
-
-import regions
-from regions import PixCoord
-from regions import PolygonSkyRegion, PolygonPixelRegion
-
+import shutil
+import sys
+import warnings
 from argparse import ArgumentParser
 
-from scipy.ndimage.morphology import binary_dilation, binary_erosion, binary_fill_holes
-from scipy.ndimage.measurements import label, find_objects
-import scipy.special
+import numpy as np
+import regions
 import scipy.ndimage
+import scipy.special
+from astropy.coordinates import SkyCoord
+from astropy.io import fits
+from astropy.wcs import WCS
+from scipy.ndimage.measurements import find_objects, label
+from scipy.ndimage.morphology import binary_dilation, binary_erosion, binary_fill_holes
 
-from breizorro.utils import get_source_size, format_source_coordinates, deg2ra, deg2dec
-from breizorro.utils import get_image_data, fitsInfo, calculate_beam_area
-from breizorro.utils import match_mask_shape, parse_fov, apply_fov_crop, apply_radial_cutoff
+from breizorro.utils import (
+    apply_fov_crop,
+    apply_radial_cutoff,
+    calculate_beam_area,
+    deg2dec,
+    deg2ra,
+    fitsInfo,
+    format_source_coordinates,
+    get_image_data,
+    get_source_size,
+    match_mask_shape,
+    parse_fov,
+)
 
 
 def create_logger():
     """Create a console logger"""
     log = logging.getLogger(__name__)
-    cfmt = logging.Formatter(('%(name)s - %(asctime)s %(levelname)s - %(message)s'))
+    cfmt = logging.Formatter(("%(name)s - %(asctime)s %(levelname)s - %(message)s"))
     log.setLevel(logging.DEBUG)
     console = logging.StreamHandler(sys.stdout)
     console.setLevel(logging.INFO)
@@ -40,12 +41,13 @@ def create_logger():
     log.addHandler(console)
     return log
 
+
 LOGGER = create_logger()
 
 
 def flush_fits(newimage, fitsfile, header=None):
     LOGGER.info(f"Writing {fitsfile}")
-    with fits.open(fitsfile, mode='update') as f:
+    with fits.open(fitsfile, mode="update") as f:
         input_hdu = f[0]
         if len(input_hdu.data.shape) == 2:
             input_hdu.data[:, :] = newimage
@@ -66,7 +68,7 @@ def make_noise_map(restored_image, boxsize):
     n = boxsize**2.0
     x = numpy.linspace(-10, 10, 1000)
     f = 0.5 * (1.0 + scipy.special.erf(x / numpy.sqrt(2.0)))
-    F = 1.0 - (1.0 - f)**n
+    F = 1.0 - (1.0 - f) ** n
     ratio = numpy.abs(numpy.interp(0.5, F, x))
     noise = -scipy.ndimage.filters.minimum_filter(restored_image, box) / ratio
     negative_mask = noise < 0.0
@@ -81,9 +83,9 @@ def make_noise_map(restored_image, boxsize):
 def resolve_island(isl_spec, mask_image, wcs, ignore_missing=False):
     if re.match(r"^\d+$", isl_spec):
         return int(isl_spec)
-    elif ':' not in isl_spec:
+    elif ":" not in isl_spec:
         raise ValueError(f"invalid island specification: {isl_spec}")
-    c = SkyCoord(*isl_spec.split(':', 1))
+    c = SkyCoord(*isl_spec.split(":", 1))
     x, y = wcs.world_to_pixel(c)
     x = round(float(x))
     y = round(float(y))
@@ -99,24 +101,50 @@ def resolve_island(isl_spec, mask_image, wcs, ignore_missing=False):
 
 def add_regions(mask_image, regs, wcs):
     for reg in regs:
-        if hasattr(reg, 'to_pixel'):
+        if hasattr(reg, "to_pixel"):
             reg = reg.to_pixel(wcs)
         mask_image += reg.to_mask().to_image(mask_image.shape)
 
 
 def remove_regions(mask_image, regs, wcs):
     for reg in regs:
-        if hasattr(reg, 'to_pixel'):
+        if hasattr(reg, "to_pixel"):
             reg = reg.to_pixel(wcs)
         mask_image[reg.to_mask().to_image(mask_image.shape) != 0] = 0
 
-def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtract,
-         field_of_view, radial_cutoff, number_islands, remove_islands, ignore_missing_islands, extract_islands,
-         minimum_size, make_binary, invert, dilate, erode, fill_holes, sum_peak,
-         ncpu, beam_size, gui, outfile, outcatalog, outregion):
+
+def main(
+    restored_image,
+    mask_image,
+    threshold,
+    boxsize,
+    savenoise,
+    merge,
+    subtract,
+    field_of_view,
+    radial_cutoff,
+    number_islands,
+    remove_islands,
+    ignore_missing_islands,
+    extract_islands,
+    minimum_size,
+    make_binary,
+    invert,
+    dilate,
+    erode,
+    fill_holes,
+    sum_peak,
+    ncpu,
+    beam_size,
+    gui,
+    outfile,
+    outcatalog,
+    outregion,
+):
     LOGGER.info("Welcome to breizorro")
     # Get version
-    from importlib.metadata import version, PackageNotFoundError
+    from importlib.metadata import PackageNotFoundError, version
+
     try:
         _version = version("breizorro")
     except PackageNotFoundError:
@@ -132,8 +160,8 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
     # define input file, and get its name and extension
     input_file = restored_image or mask_image
     if input_file:
-        name = '.'.join(input_file.split('.')[:-1])
-        ext = input_file.split('.')[-1]
+        name = ".".join(input_file.split(".")[:-1])
+        ext = input_file.split(".")[-1]
 
     # first, load or generate mask
     if restored_image:
@@ -146,21 +174,21 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
             shutil.copyfile(input_file, noise_fits)
             flush_fits(noise_image, noise_fits)
 
-        mask_image = (input_image > threshold * noise_image).astype('float64')
+        mask_image = (input_image > threshold * noise_image).astype("float64")
 
-        mask_image[:, -1]=0
-        mask_image[:, 0]=0
-        mask_image[0, :]=0
-        mask_image[-1, :]=0
+        mask_image[:, -1] = 0
+        mask_image[:, 0] = 0
+        mask_image[0, :] = 0
+        mask_image[-1, :] = 0
 
         mask_header = input_header
-        mask_header['BUNIT'] = 'mask'
+        mask_header["BUNIT"] = "mask"
 
         out_mask_fits = outfile or f"{name}.mask.fits"
 
     elif mask_image:
         mask_image, mask_header = get_image_data(mask_image)
-        LOGGER.info(f"Input mask loaded")
+        LOGGER.info("Input mask loaded")
 
         out_mask_fits = outfile or f"{name}.out.{ext}"
     else:
@@ -179,10 +207,10 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
         except OSError:
             try:
                 regs = regions.Regions.read(filename)
-            except:
+            except (OSError, ValueError):
                 msg = f"{merge} is neither a FITS file not a regions file"
                 LOGGER.error(msg)
-                raise(msg)
+                raise (msg)
         return fits, regs
 
     if isinstance(merge, list):
@@ -193,7 +221,9 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
                 merge_mask = fits[0]
                 # Match the shape of the merged mask to the current mask
                 if merge_mask.shape != mask_image.shape:
-                    LOGGER.info(f"Resizing merged mask from {merge_mask.shape} to {mask_image.shape}")
+                    LOGGER.info(
+                        f"Resizing merged mask from {merge_mask.shape} to {mask_image.shape}"
+                    )
                     merge_mask = match_mask_shape(merge_mask, mask_image.shape)
                 mask_image += merge_mask
                 LOGGER.info("Merged into mask")
@@ -201,7 +231,7 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
                 LOGGER.info(f"Merging in {len(regs)} regions from {_merge}")
                 add_regions(mask_image, regs, wcs)
         mask_image = mask_image != 0
-        mask_header['BUNIT'] = 'mask'
+        mask_header["BUNIT"] = "mask"
 
     if isinstance(subtract, list):
         for _subtract in subtract:
@@ -211,7 +241,9 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
                 subtract_mask = fits[0]
                 # Match the shape of the subtracted mask to the current mask
                 if subtract_mask.shape != mask_image.shape:
-                    LOGGER.info(f"Resizing subtracted mask from {subtract_mask.shape} to {mask_image.shape}")
+                    LOGGER.info(
+                        f"Resizing subtracted mask from {subtract_mask.shape} to {mask_image.shape}"
+                    )
                     subtract_mask = match_mask_shape(subtract_mask, mask_image.shape)
                 mask_image[subtract_mask != 0] = 0
                 LOGGER.info("Subtracted from mask")
@@ -220,18 +252,18 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
                 remove_regions(mask_image, regs, wcs)
 
     if number_islands:
-        LOGGER.info(f"(Re)numbering islands")
+        LOGGER.info("(Re)numbering islands")
         mask_image = mask_image != 0
         # mask_image = mask_image.byteswap().newbyteorder()
         mask_image, num_features = label(mask_image)
-        mask_header['BUNIT'] = 'Source_ID'
+        mask_header["BUNIT"] = "Source_ID"
         LOGGER.info(f"Number of islands: {num_features}")
-    
+
     if isinstance(remove_islands, list):
         LOGGER.info(f"Removing islands: {remove_islands}")
         for isl_spec in remove_islands:
             isl = resolve_island(isl_spec, mask_image, wcs, ignore_missing=ignore_missing_islands)
-            if isl != None:
+            if isl is not None:
                 mask_image[mask_image == isl] = 0
 
     if isinstance(extract_islands, list):
@@ -246,33 +278,35 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
         LOGGER.info(f"Removing islands that occupy fewer than or equal to {minimum_size} pixels")
         mask_image = mask_image != 0
         island_labels, num_features = label(mask_image)
-        island_areas = numpy.array(scipy.ndimage.sum(mask_image,island_labels, numpy.arange(island_labels.max()+1)))
+        island_areas = numpy.array(
+            scipy.ndimage.sum(mask_image, island_labels, numpy.arange(island_labels.max() + 1))
+        )
         min_mask = island_areas >= minimum_size
         mask_image = min_mask[island_labels.ravel()].reshape(island_labels.shape)
 
     if make_binary:
-        LOGGER.info(f"Converting mask to binary")
-        mask_image = mask_image!=0
-        mask_header['BUNIT'] = 'mask'
+        LOGGER.info("Converting mask to binary")
+        mask_image = mask_image != 0
+        mask_header["BUNIT"] = "mask"
 
     if invert:
-        LOGGER.info(f"Inverting mask")
-        mask_image = mask_image==0
+        LOGGER.info("Inverting mask")
+        mask_image = mask_image == 0
 
     if dilate:
         LOGGER.info(f"Dilating mask using a ball of R={dilate}pix")
         R = dilate
-        r = np.arange(-R, R+1)
-        struct = np.sqrt(r[:, np.newaxis]**2 + r[np.newaxis,:]**2) <= R
+        r = np.arange(-R, R + 1)
+        struct = np.sqrt(r[:, np.newaxis] ** 2 + r[np.newaxis, :] ** 2) <= R
         mask_image = binary_dilation(input=mask_image, structure=struct)
 
     if erode:
         LOGGER.info(f"Applying {erode} iteration(s) of erosion")
         N = erode
         mask_image = binary_erosion(input=mask_image, iterations=N)
-        
+
     if fill_holes:
-        LOGGER.info(f"Filling closed regions")
+        LOGGER.info("Filling closed regions")
         mask_image = binary_fill_holes(mask_image)
 
     if sum_peak:
@@ -293,10 +327,10 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
         for ext_isl in extended_islands:
             isl_slice = mask_image[ext_isl] == 0
             new_mask_image[ext_isl] = isl_slice
-        mask_header['BUNIT'] = 'Jy/beam'
+        mask_header["BUNIT"] = "Jy/beam"
         mask_image = input_image * new_mask_image
         LOGGER.info(f"Number of extended islands found: {len(extended_islands)}")
-        
+
         # Apply field-of-view cropping if specified
         if field_of_view:
             LOGGER.info(f"Applying field-of-view crop: {field_of_view}")
@@ -304,10 +338,12 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
             if actual_fov:
                 x0, x1, y0, y1 = actual_fov
                 # Update WCS header to reflect the cropped region
-                mask_header['CRPIX1'] -= x0
-                mask_header['CRPIX2'] -= y0
-                LOGGER.info(f"Mask cropped to shape: {mask_image.shape} (bounds clamped to image dimensions)")
-        
+                mask_header["CRPIX1"] -= x0
+                mask_header["CRPIX2"] -= y0
+                LOGGER.info(
+                    f"Mask cropped to shape: {mask_image.shape} (bounds clamped to image dimensions)"
+                )
+
         shutil.copyfile(input_file, out_mask_fits)  # to provide a template
         flush_fits(mask_image, out_mask_fits, mask_header)
         LOGGER.info("Done")
@@ -317,7 +353,7 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
         try:
             from skimage.measure import find_contours
         except ImportError:
-            LOGGER.info('pip install breizorro[all] to use cataloguing feature.')
+            LOGGER.info("pip install breizorro[all] to use cataloguing feature.")
             exit(1)
         contours = find_contours(mask_image, 0.5)
         polygon_regions = []
@@ -327,82 +363,85 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
             # Convert the pixel coordinates to Sky coordinates
             contour_sky = wcs.pixel_to_world(contour_pixels[:, 1], contour_pixels[:, 0])
             # Create a Polygon region from the Sky coordinates
-            polygon_region = PolygonSkyRegion(vertices=contour_sky, meta={'label': 'Region'})
+            polygon_region = PolygonSkyRegion(vertices=contour_sky, meta={"label": "Region"})
             # Add the polygon region to the list
             polygon_regions.append(polygon_region)
         LOGGER.info(f"Number of regions found: {len(polygon_regions)}")
         if outregion:
-            regions.Regions(polygon_regions).write(outregion, format='ds9')
+            regions.Regions(polygon_regions).write(outregion, format="ds9")
             LOGGER.info(f"Saving regions in {outregion}")
 
     if outcatalog and restored_image:
         try:
             import warnings
+
             # Suppress FittingWarnings from Astropy
             # WARNING: The fit may be unsuccessful; check fit_info['message'] for more information. [astropy.modeling.fitting]
             # Use context manager for handling warnings
             with warnings.catch_warnings():
                 warnings.resetwarnings()
-                warnings.filterwarnings('ignore', category=UserWarning, append=True)
+                warnings.filterwarnings("ignore", category=UserWarning, append=True)
             from breizorro.catalog import multiprocess_contours
         except ModuleNotFoundError:
             msg = "Running breizorro source detector requires optional dependencies, please re-install with: pip install breizorro[all]"
             LOGGER.error(msg)
-            raise(msg)
+            raise (msg)
         source_list = []
         image_data, hdu_header = get_image_data(restored_image)
         fitsinfo = fitsInfo(restored_image)
-        mean_beam = None # Use beam info from the image header by default
+        mean_beam = None  # Use beam info from the image header by default
         if beam_size:
             mean_beam = beam_size
         if mean_beam:
-            LOGGER.info(f'Using user provided size: {mean_beam}')
-        elif fitsinfo['b_size']:
-            bmaj,bmin,_ = np.array(fitsinfo['b_size']) * 3600.0
+            LOGGER.info(f"Using user provided size: {mean_beam}")
+        elif fitsinfo["b_size"]:
+            bmaj, bmin, _ = np.array(fitsinfo["b_size"]) * 3600.0
             mean_beam = 0.5 * (bmaj + bmin)
         else:
-            raise('No beam information found. Specify mean beam in arcsec: --beam-size 6.5')
+            raise ("No beam information found. Specify mean beam in arcsec: --beam-size 6.5")
 
         noise = np.median(noise_image)
-        f = open(outcatalog, 'w')
-        catalog_out = f'# processing fits image: {restored_image}  \n'
+        f = open(outcatalog, "w")
+        catalog_out = f"# processing fits image: {restored_image}  \n"
         f.write(catalog_out)
-        catalog_out = f'# mean beam size (arcsec): {round(mean_beam,2)} \n' 
+        catalog_out = f"# mean beam size (arcsec): {round(mean_beam, 2)} \n"
         f.write(catalog_out)
-        catalog_out = f'# original image peak flux (Jy/beam): {image_data.max()} \n'
+        catalog_out = f"# original image peak flux (Jy/beam): {image_data.max()} \n"
         f.write(catalog_out)
-        catalog_out = f'# noise out (µJy/beam): {round(noise*1000000,2)} \n'
+        catalog_out = f"# noise out (µJy/beam): {round(noise * 1000000, 2)} \n"
         f.write(catalog_out)
         limiting_flux = noise * threshold
-        catalog_out = f'# cutt-off flux  (mJy/beam): {round(limiting_flux*1000,2)} \n'
+        catalog_out = f"# cutt-off flux  (mJy/beam): {round(limiting_flux * 1000, 2)} \n"
         f.write(catalog_out)
-        LOGGER.info('Submitting distributed tasks for cataloguing. This might take a while...')
+        LOGGER.info("Submitting distributed tasks for cataloguing. This might take a while...")
         source_list = multiprocess_contours(contours, image_data, fitsinfo, noise, ncpu)
         catalog_out = f"# freq0 (Hz): {fitsinfo['freq0']} \n"
         f.write(catalog_out)
-        catalog_out = f'# number of sources detected: {len(source_list)} \n'
+        catalog_out = f"# number of sources detected: {len(source_list)} \n"
         f.write(catalog_out)
-        catalog_out = '#\n#format: name ra_d dec_d i i_err emaj_s emin_s pa_d\n'
+        catalog_out = "#\n#format: name ra_d dec_d i i_err emaj_s emin_s pa_d\n"
         f.write(catalog_out)
         for i in range(len(source_list)):
-            output = 'src' + str(i) + ' ' + source_list[i][1] + '\n'
+            output = "src" + str(i) + " " + source_list[i][1] + "\n"
             f.write(output)
         f.close()
-        LOGGER.info(f'Source catalog saved: {outcatalog}')
+        LOGGER.info(f"Source catalog saved: {outcatalog}")
 
     if gui:
         try:
             from breizorro.gui import display
         except ModuleNotFoundError:
-            LOGGER.error("Running breizorro gui requires optional dependencies, please re-install with: pip install breizorro[gui]")
-            raise('Missing GUI dependencies')
+            LOGGER.error(
+                "Running breizorro gui requires optional dependencies, please re-install with: pip install breizorro[gui]"
+            )
+            raise ("Missing GUI dependencies")
 
         LOGGER.info("Loading Gui ...")
         display(input_file, mask_image, outcatalog, source_list)
 
-        LOGGER.info(f"Enforcing that mask to binary")
-        mask_image = mask_image!=0
-        mask_header['BUNIT'] = 'mask'
+        LOGGER.info("Enforcing that mask to binary")
+        mask_image = mask_image != 0
+        mask_header["BUNIT"] = "mask"
 
     # Apply field-of-view cropping if specified
     if field_of_view:
@@ -411,15 +450,17 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
         if actual_fov:
             x0, x1, y0, y1 = actual_fov
             # Update WCS header to reflect the cropped region
-            mask_header['CRPIX1'] -= x0
-            mask_header['CRPIX2'] -= y0
-            LOGGER.info(f"Mask cropped to shape: {mask_image.shape} (bounds clamped to image dimensions)")
-    
+            mask_header["CRPIX1"] -= x0
+            mask_header["CRPIX2"] -= y0
+            LOGGER.info(
+                f"Mask cropped to shape: {mask_image.shape} (bounds clamped to image dimensions)"
+            )
+
     # Apply radial cutoff if specified (always on the final cropped mask)
     if radial_cutoff:
         LOGGER.info(f"Applying radial cutoff: {radial_cutoff} pixels from center")
         mask_image = apply_radial_cutoff(mask_image, radial_cutoff)
-        LOGGER.info(f"Radial cutoff applied (imitating beam attenuation)")
+        LOGGER.info("Radial cutoff applied (imitating beam attenuation)")
 
     shutil.copyfile(input_file, out_mask_fits)  # to provide a template
     flush_fits(mask_image, out_mask_fits, mask_header)

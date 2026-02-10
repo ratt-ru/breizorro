@@ -308,3 +308,134 @@ def get_source_size(contour, pixel_size, mean_beam, image, int_peak_ratio, centr
         pa = round(pos_angle,2)
         src_size = (emaj, emin, pa)
     return src_size
+
+
+def match_mask_shape(mask_to_match, target_shape):
+    """
+    Crop or extend a mask to match the target shape.
+    If the mask is larger, crop it. If smaller, extend with zeros.
+    
+    Parameters:
+    mask_to_match (ndarray): The mask to resize
+    target_shape (tuple): The target (height, width) shape
+    
+    Returns:
+    ndarray: The resized mask matching target_shape
+    """
+    h_src, w_src = mask_to_match.shape
+    h_tgt, w_tgt = target_shape
+    
+    # If shapes already match, return as is
+    if h_src == h_tgt and w_src == w_tgt:
+        return mask_to_match
+    
+    # Create output array with target shape
+    matched_mask = np.zeros(target_shape, dtype=mask_to_match.dtype)
+    
+    # Calculate the overlap region
+    h_overlap = min(h_src, h_tgt)
+    w_overlap = min(w_src, w_tgt)
+    
+    # Copy the overlapping region
+    matched_mask[:h_overlap, :w_overlap] = mask_to_match[:h_overlap, :w_overlap]
+    
+    return matched_mask
+
+
+def parse_fov(fov_str):
+    """
+    Parse field-of-view string in format "x0,y0,x1,y1".
+    
+    Parameters:
+    fov_str (str): FOV string like "0,0,1023,1023"
+    
+    Returns:
+    tuple: (x0, x1, y0, y1) as integers, or None if invalid
+    """
+    if not fov_str:
+        return None
+    
+    try:
+        if not isinstance(fov_str, str):
+            raise ValueError(f"FOV must be a string, got: {type(fov_str)}")
+        
+        parts = fov_str.split(',')
+        if len(parts) != 4:
+            raise ValueError(f"FOV must have exactly 4 comma-separated values [x0,y0,x1,y1], got {len(parts)} values")
+        
+        x0, y0, x1, y1 = int(parts[0]), int(parts[1]), int(parts[2]), int(parts[3])
+        
+        if x0 < 0 or y0 < 0 or x1 <= x0 or y1 <= y0:
+            raise ValueError(f"Invalid FOV range: x0={x0}, y0={y0}, x1={x1}, y1={y1}. "
+                           f"All must be non-negative and x1>x0, y1>y0")
+        
+        return (x0, x1, y0, y1)
+    except (ValueError, TypeError) as e:
+        raise ValueError(f"Error parsing FOV string '{fov_str}': {e}")
+
+
+def apply_fov_crop(mask, fov_str):
+    """
+    Apply field-of-view cropping to a mask.
+    Clamps the FOV bounds to the image dimensions if they exceed it.
+    
+    Parameters:
+    mask (ndarray): The mask to crop
+    fov_str (str): FOV string in format "x0,y0,x1,y1"
+    
+    Returns:
+    tuple: (cropped_mask, actual_fov) where actual_fov is (x0, x1, y0, y1) after clamping
+    """
+    fov = parse_fov(fov_str)
+    if fov is None:
+        return mask, None
+    
+    x0, x1, y0, y1 = fov
+    h, w = mask.shape
+    
+    # Clamp bounds to image dimensions
+    x0 = max(0, x0)
+    y0 = max(0, y0)
+    x1 = min(w, x1)
+    y1 = min(h, y1)
+    
+    if x0 >= x1 or y0 >= y1:
+        raise ValueError(f"FOV range results in invalid crop after clamping: x0={x0}, x1={x1}, y0={y0}, y1={y1}")
+    
+    # Crop the mask
+    cropped_mask = mask[y0:y1, x0:x1]
+    
+    return cropped_mask, (x0, x1, y0, y1)
+
+
+def apply_radial_cutoff(mask, radius_pixels):
+    """
+    Zero out everything beyond a circular radius from the center of the mask.
+    This imitates beam attenuation.
+    
+    Parameters:
+    mask (ndarray): The mask to apply radial cutoff to
+    radius_pixels (float): Radius in pixels from center
+    
+    Returns:
+    ndarray: The mask with radial cutoff applied
+    """
+    if radius_pixels is None or radius_pixels <= 0:
+        return mask
+    
+    h, w = mask.shape
+    center_y, center_x = h / 2.0, w / 2.0
+    
+    # Create coordinate grids
+    y, x = np.ogrid[:h, :w]
+    
+    # Calculate distance from center for each pixel
+    dist_from_center = np.sqrt((x - center_x)**2 + (y - center_y)**2)
+    
+    # Create circular mask
+    circular_mask = dist_from_center <= radius_pixels
+    
+    # Apply the circular mask
+    result_mask = mask * circular_mask
+    
+    return result_mask

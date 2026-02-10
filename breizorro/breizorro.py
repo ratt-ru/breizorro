@@ -26,6 +26,7 @@ import scipy.ndimage
 
 from breizorro.utils import get_source_size, format_source_coordinates, deg2ra, deg2dec
 from breizorro.utils import get_image_data, fitsInfo, calculate_beam_area
+from breizorro.utils import match_mask_shape, parse_fov, apply_fov_crop, apply_radial_cutoff
 
 
 def create_logger():
@@ -110,7 +111,7 @@ def remove_regions(mask_image, regs, wcs):
         mask_image[reg.to_mask().to_image(mask_image.shape) != 0] = 0
 
 def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtract,
-         number_islands, remove_islands, ignore_missing_islands, extract_islands,
+         field_of_view, radial_cutoff, number_islands, remove_islands, ignore_missing_islands, extract_islands,
          minimum_size, make_binary, invert, dilate, erode, fill_holes, sum_peak,
          ncpu, beam_size, gui, outfile, outcatalog, outregion):
     LOGGER.info("Welcome to breizorro")
@@ -189,7 +190,12 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
             fits, regs = load_fits_or_region(_merge)
             if fits:
                 LOGGER.info(f"Treating {_merge} as a FITS mask")
-                mask_image += fits[0]
+                merge_mask = fits[0]
+                # Match the shape of the merged mask to the current mask
+                if merge_mask.shape != mask_image.shape:
+                    LOGGER.info(f"Resizing merged mask from {merge_mask.shape} to {mask_image.shape}")
+                    merge_mask = match_mask_shape(merge_mask, mask_image.shape)
+                mask_image += merge_mask
                 LOGGER.info("Merged into mask")
             else:
                 LOGGER.info(f"Merging in {len(regs)} regions from {_merge}")
@@ -202,7 +208,12 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
             fits, regs = load_fits_or_region(_subtract)
             if fits:
                 LOGGER.info(f"treating {_subtract} as a FITS mask")
-                mask_image[fits[0] != 0] = 0
+                subtract_mask = fits[0]
+                # Match the shape of the subtracted mask to the current mask
+                if subtract_mask.shape != mask_image.shape:
+                    LOGGER.info(f"Resizing subtracted mask from {subtract_mask.shape} to {mask_image.shape}")
+                    subtract_mask = match_mask_shape(subtract_mask, mask_image.shape)
+                mask_image[subtract_mask != 0] = 0
                 LOGGER.info("Subtracted from mask")
             else:
                 LOGGER.info(f"Subtracting {len(regs)} regions from {_subtract}")
@@ -285,6 +296,18 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
         mask_header['BUNIT'] = 'Jy/beam'
         mask_image = input_image * new_mask_image
         LOGGER.info(f"Number of extended islands found: {len(extended_islands)}")
+        
+        # Apply field-of-view cropping if specified
+        if field_of_view:
+            LOGGER.info(f"Applying field-of-view crop: {field_of_view}")
+            mask_image, actual_fov = apply_fov_crop(mask_image, field_of_view)
+            if actual_fov:
+                x0, x1, y0, y1 = actual_fov
+                # Update WCS header to reflect the cropped region
+                mask_header['CRPIX1'] -= x0
+                mask_header['CRPIX2'] -= y0
+                LOGGER.info(f"Mask cropped to shape: {mask_image.shape} (bounds clamped to image dimensions)")
+        
         shutil.copyfile(input_file, out_mask_fits)  # to provide a template
         flush_fits(mask_image, out_mask_fits, mask_header)
         LOGGER.info("Done")
@@ -380,6 +403,23 @@ def main(restored_image, mask_image, threshold, boxsize, savenoise, merge, subtr
         LOGGER.info(f"Enforcing that mask to binary")
         mask_image = mask_image!=0
         mask_header['BUNIT'] = 'mask'
+
+    # Apply field-of-view cropping if specified
+    if field_of_view:
+        LOGGER.info(f"Applying field-of-view crop: {field_of_view}")
+        mask_image, actual_fov = apply_fov_crop(mask_image, field_of_view)
+        if actual_fov:
+            x0, x1, y0, y1 = actual_fov
+            # Update WCS header to reflect the cropped region
+            mask_header['CRPIX1'] -= x0
+            mask_header['CRPIX2'] -= y0
+            LOGGER.info(f"Mask cropped to shape: {mask_image.shape} (bounds clamped to image dimensions)")
+    
+    # Apply radial cutoff if specified (always on the final cropped mask)
+    if radial_cutoff:
+        LOGGER.info(f"Applying radial cutoff: {radial_cutoff} pixels from center")
+        mask_image = apply_radial_cutoff(mask_image, radial_cutoff)
+        LOGGER.info(f"Radial cutoff applied (imitating beam attenuation)")
 
     shutil.copyfile(input_file, out_mask_fits)  # to provide a template
     flush_fits(mask_image, out_mask_fits, mask_header)

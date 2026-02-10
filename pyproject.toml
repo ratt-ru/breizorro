@@ -1,61 +1,62 @@
-[tool.poetry]
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
 name = "breizorro"
-version = "0.2.0"
+version = "0.2.1"
 description = "Creates a binary mask given a FITS image"
-authors = ["Ian Heywood & RATT <ian.heywood@phyics.ox.ac.uk>"]
+authors = [
+    { name = "Ian Heywood", email = "ian.heywood@physics.ox.ac.uk" },
+    { name = "RATT", email = "ratt@ru.ac.za" }
+]
 readme = "README.rst"
-homepage = "https://github.com/ratt-ru/breizorro"
-repository = "https://github.com/ratt-ru/breizorro.git"
+license = { text = "GNU GPL v3" }
+requires-python = ">=3.9,<3.13"
 keywords = ["Astronomy", "Masking", "Imaging"]
 classifiers = [
-          "Development Status :: 5 - Production/Stable",
-          "Intended Audience :: Science/Research",
-          "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
-          "Operating System :: POSIX :: Linux",
-          "Programming Language :: Python",
-          "Topic :: Scientific/Engineering :: Astronomy"
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python",
+    "Topic :: Scientific/Engineering :: Astronomy"
 ]
-license = "GNU GPL v3"
-packages = [
-    {include = "breizorro"},
+dependencies = [
+    "astropy",
+    "numpy",
+    "omegaconf",
+    "regions>=0.8",
+    "scipy>=1.13.1",
+    "stimela>=2.0.2"
 ]
 
-[tool.poetry.scripts]
-breizorro = "breizorro.main:driver"
-
-[tool.poetry.dependencies]
-python = ">=3.9, <3.13"
-astropy = "*"
-numpy = "*"
-omegaconf = "*"
-regions = ">=0.8"
-scipy = ">=1.13.1"
-stimela = ">=2.0.2"
-# Optional dependencies start here
-bokeh = { version = "*", optional = true}
-photutils = { version = "*", optional = true}
-pytest = { version = "*", optional=true }
-pytest-flake8 = { version = "*", optional=true }
-scikit-image = { version = "*", optional = true}
-
-[build-system]
-requires = ["setuptools", "poetry-core"]
-build-backend = "poetry.core.masonry.api"
-
-[tool.poetry.extras]
+[project.optional-dependencies]
 all = ["bokeh", "photutils", "scikit-image"]
 gui = ["bokeh"]
-testing = ["pytest", "pytest-flake8"]
+catalog = ["photutils", "scikit-image"]
 
-[tool.poetry.group.tests]
-optional = true
-[tool.poetry.group.tests.dependencies]
-pytest = "*"
-flake8 = "*"
+[project.urls]
+Homepage = "https://github.com/ratt-ru/breizorro"
+Repository = "https://github.com/ratt-ru/breizorro.git"
 
-[tool.poetry.group.docs]
-optional = true
-[tool.poetry.group.docs.dependencies]
-Sphinx = "^5.3.0"
-sphinx-copybutton = "^0.5.0"
-furo = "^2022.9.15"
+[project.scripts]
+breizorro = "breizorro.main:driver"
+
+[dependency-groups]
+tests = [
+    "pytest>=7.0",
+    "pytest-cov",
+    "flake8"
+]
+docs = [
+    "Sphinx>=5.3.0",
+    "sphinx-copybutton>=0.5.0",
+    "furo>=2022.9.15"
+]
+
+[tool.uv]
+default-groups = ["tests", "docs"]
+
+[tool.hatch.metadata]
+allow-direct-references = true

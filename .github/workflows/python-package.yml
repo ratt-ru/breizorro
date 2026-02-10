@@ -6,76 +6,67 @@ name: Python package
 on:
   push:
     branches:
-    - master
+    - main
     tags:
     - "*"
   pull_request:
   schedule:
     - cron: '30 2 * * 1' # Every Monday @ 2h30am UTC
 
-env:
-  POETRY_VERSION: 2.0.1
-
 jobs:
   build:
-
     runs-on: ubuntu-latest
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12"]
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
+    
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: Cache Installations
-      id: cache-installs
-      uses: actions/cache@v3
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
       with:
-        path: ~/.local
-        key: install-${{ env.INSTALL_CACHE_HASH }}-2
+        enable-cache: true
 
-    - name: Install Poetry
-      uses: abatilo/actions-poetry@v3
-      with:
-        poetry-version: ${{ env.POETRY_VERSION }}
+    - name: Install breizorro with all dependencies
+      run: uv sync --all-groups
 
-    - name: Test poetry
-      run: poetry --version
+    - name: Test breizorro command
+      run: uv run breizorro --help
 
-    - name: Checkout source
-      uses: actions/checkout@v2
-      with:
-        fetch-depth: 1
-
-    - name: Install breizorro
-      run: poetry install
-
-    - name: Install breizorro with all modules
-      run: poetry install --extras "all"
-      
-    - name: Install breizorro with tests
-      run: poetry install --with tests --no-interaction
+    - name: Run pytest tests
+      run: uv run pytest breizorro/tests/ -v
 
     - name: Lint with flake8
       run: |
         # stop the build if there are Python syntax errors or undefined names
-        poetry run flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        uv run flake8 breizorro --count --select=E9,F63,F7,F82 --show-source --statistics
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-        poetry run flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+        uv run flake8 breizorro --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
-    - name: Test command
-      run: |
-        poetry run breizorro --help
-
-    - name: Download test dataset
+    - name: Download test dataset (real FITS file)
       run: |
         curl -L -o mypipelinerun_circinus_p3_3-MFS-image.tar "https://www.dropbox.com/scl/fi/xoaqth4jhjnx098xbegvn/mypipelinerun_circinus_p3_3-MFS-image.tar?rlkey=vdgkz2xpjgpp7v7hjxm7kg6g2&st=isg70eve&dl=1" && tar -xvf mypipelinerun_circinus_p3_3-MFS-image.tar
 
-    - name: Run end-to-end test
+    - name: Run end-to-end tests
       run: |
-        poetry run breizorro -r mypipelinerun_circinus_p3_3-MFS-image.fits --outfile test.mask.fits --outregion test.mask.rgn
-        poetry run breizorro -r mypipelinerun_circinus_p3_3-MFS-image.fits -t 10 --merge test.mask.fits,test.mask.rgn --remove-islands 19,21,14h16m20.3:-65d42m07 --number-islands 
+        # Basic mask generation with default FOV (full view)
+        uv run breizorro -r mypipelinerun_circinus_p3_3-MFS-image.fits --outfile test.mask.fits --outregion test.mask.rgn
+        
+        # Test with merge, remove islands, and numbering
+        uv run breizorro -r mypipelinerun_circinus_p3_3-MFS-image.fits -t 10 --merge test.mask.fits,test.mask.rgn --remove-islands 19,21,14h16m20.3:-65d42m07 --number-islands --outfile test.numbered.fits
+        
+        # Test field-of-view (FOV) cropping feature
+        uv run breizorro -r mypipelinerun_circinus_p3_3-MFS-image.fits --field-of-view 100,100,900,900 --outfile test.fov.fits
+        
+        # Test radial cutoff feature (beam attenuation)
+        uv run breizorro -r mypipelinerun_circinus_p3_3-MFS-image.fits --radial-cutoff 400 --outfile test.radial.fits
+        
+        # Test combined FOV crop and radial cutoff
+        uv run breizorro -r mypipelinerun_circinus_p3_3-MFS-image.fits --field-of-view 100,100,900,900 --radial-cutoff 300 --outfile test.fov_radial.fits
+

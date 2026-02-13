@@ -12,6 +12,7 @@ import scipy.special
 from astropy.coordinates import SkyCoord
 from astropy.io import fits
 from astropy.wcs import WCS
+from reproject import reproject_interp
 from scipy.ndimage.measurements import find_objects, label
 from scipy.ndimage.morphology import binary_dilation, binary_erosion, binary_fill_holes
 
@@ -213,18 +214,33 @@ def main(
                 raise (msg)
         return fits, regs
 
+    def reproject_mask_to_reference(mask_data, mask_header):
+        try:
+            mask_wcs = WCS(mask_header)
+            while len(mask_wcs.array_shape) > 2:
+                mask_wcs = mask_wcs.dropaxis(len(mask_wcs.array_shape) - 1)
+            reprojected, _ = reproject_interp(
+                (mask_data, mask_wcs),
+                wcs,
+                shape_out=mask_image.shape,
+                order="nearest-neighbor",
+            )
+            return np.nan_to_num(reprojected, nan=0.0)
+        except Exception as exc:
+            LOGGER.warning(
+                "Failed to reproject mask to reference WCS (%s). Falling back to shape match.",
+                exc,
+            )
+            return match_mask_shape(mask_data, mask_image.shape)
+
     if isinstance(merge, list):
         for _merge in merge:
             fits, regs = load_fits_or_region(_merge)
             if fits:
                 LOGGER.info(f"Treating {_merge} as a FITS mask")
-                merge_mask = fits[0]
-                # Match the shape of the merged mask to the current mask
-                if merge_mask.shape != mask_image.shape:
-                    LOGGER.info(
-                        f"Resizing merged mask from {merge_mask.shape} to {mask_image.shape}"
-                    )
-                    merge_mask = match_mask_shape(merge_mask, mask_image.shape)
+                merge_mask, merge_header = fits
+                # Reproject to reference WCS before merging
+                merge_mask = reproject_mask_to_reference(merge_mask, merge_header)
                 mask_image += merge_mask
                 LOGGER.info("Merged into mask")
             else:
@@ -238,13 +254,9 @@ def main(
             fits, regs = load_fits_or_region(_subtract)
             if fits:
                 LOGGER.info(f"treating {_subtract} as a FITS mask")
-                subtract_mask = fits[0]
-                # Match the shape of the subtracted mask to the current mask
-                if subtract_mask.shape != mask_image.shape:
-                    LOGGER.info(
-                        f"Resizing subtracted mask from {subtract_mask.shape} to {mask_image.shape}"
-                    )
-                    subtract_mask = match_mask_shape(subtract_mask, mask_image.shape)
+                subtract_mask, subtract_header = fits
+                # Reproject to reference WCS before subtracting
+                subtract_mask = reproject_mask_to_reference(subtract_mask, subtract_header)
                 mask_image[subtract_mask != 0] = 0
                 LOGGER.info("Subtracted from mask")
             else:

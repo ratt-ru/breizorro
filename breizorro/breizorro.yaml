@@ -39,11 +39,6 @@ cabs:
         metavar: "MASK(s)|REG(s)"
         policies:
           repeat: '[]'
-      field-of-view:
-        info: "Crop/extract a region from the mask in pixels: x0,y0,x1,y1"
-        dtype: str
-        metavar: "X0,Y0,X1,Y1"
-        abbreviation: fov
       radial-cutoff:
         info: "Zero out mask beyond this radius in pixels from center (imitates beam attenuation)"
         dtype: float

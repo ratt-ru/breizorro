@@ -63,18 +63,19 @@ jobs:
 
     - name: Run end-to-end tests
       run: |
-        # Basic mask generation with default FOV (full view)
+        # Basic mask generation
         uv run breizorro -r mypipelinerun_circinus_p3_3-MFS-image.fits --outfile test.mask.fits --outregion test.mask.rgn
         
         # Test with merge, remove islands, and numbering
         uv run breizorro -r mypipelinerun_circinus_p3_3-MFS-image.fits -t 10 --merge test.mask.fits,test.mask.rgn --remove-islands 19,21,14h16m20.3:-65d42m07 --number-islands --outfile test.numbered.fits
         
-        # Test field-of-view (FOV) cropping feature
-        uv run breizorro -r mypipelinerun_circinus_p3_3-MFS-image.fits --field-of-view 100,100,900,900 --outfile test.fov.fits
-        
         # Test radial cutoff feature (beam attenuation)
         uv run breizorro -r mypipelinerun_circinus_p3_3-MFS-image.fits --radial-cutoff 400 --outfile test.radial.fits
         
-        # Test combined FOV crop and radial cutoff
-        uv run breizorro -r mypipelinerun_circinus_p3_3-MFS-image.fits --field-of-view 100,100,900,900 --radial-cutoff 300 --outfile test.fov_radial.fits
+        # Test dilation and erosion
+        uv run breizorro -r mypipelinerun_circinus_p3_3-MFS-image.fits --dilate 3 --outfile test.dilate.fits
+        
+        # Test fill holes
+        uv run breizorro -r mypipelinerun_circinus_p3_3-MFS-image.fits --fill-holes --outfile test.filled.fits
+
 

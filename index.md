@@ -21,9 +21,6 @@ Options:
   --savenoise / --no-savenoise    Export noise image as FITS file
   --merge TEXT                    Merge one or more masks or region files
   --subtract TEXT                 Subtract one or more masks or region files
-  -fov, --field-of-view X0,Y0,X1,Y1
-                                  Crop/extract a region from the mask in
-                                  pixels: x0,y0,x1,y1 (default: full view)
   -rc, --radial-cutoff FLOAT      Zero out mask beyond this radius in pixels
                                   from center (imitates beam attenuation)
   --number-islands / --no-number-islands
@@ -90,25 +87,9 @@ breizorro -r circinus-MFS-image.fits --merge west.reg --dilate 1 --fill-holes
 
 ![mypipelinerun_circinus_p3_3-MFS-image mask fits-mypipelinerun_circinus_p3_3-MFS-image mask fits-image-2024-09-11-13-59-39](https://github.com/user-attachments/assets/2308c7b7-2ec0-4895-b93b-5d96f3d99337)
 
-# Field-of-View and Radial Masking
+# Radial Masking
 
-Breizorro includes advanced masking capabilities for spatial region selection and beam attenuation simulation.
-
-## Field-of-View Cropping
-
-Extract a specific rectangular region from your mask using pixel coordinates:
-
-```
-breizorro -r circinus-MFS-image.fits --field-of-view 100,50,900,850
-```
-
-The `--field-of-view` (or `-fov`) parameter accepts four comma-separated integer values: `x0,y0,x1,y1`. If you specify bounds that exceed the image dimensions, they are automatically clamped to the image size. This is particularly useful when:
-
-- Merging masks from different observations or simulations
-- Extracting regions of interest for detailed analysis
-- Working with large datasets where memory optimization is needed
-
-When merging masks of different sizes via `--merge`, breizorro automatically resizes them to match your input image (cropping if larger, zero-padding if smaller) before applying the field-of-view crop.
+Breizorro includes radial cutoff capability for beam attenuation simulation.
 
 ## Radial Cutoff
 
@@ -124,20 +105,7 @@ The `--radial-cutoff` (or `-rc`) parameter accepts a radius in pixels from the c
 - Removing edge effects and artifacts
 - Focusing analysis on the central, more sensitive region of observations
 
-The radial cutoff is always applied **after** all other mask operations, including field-of-view cropping.
-
-## Combined Usage
-
-You can combine field-of-view cropping with radial cutoff for powerful spatial filtering:
-
-```
-breizorro -r image.fits --merge other_mask.fits -fov 100,50,900,850 -rc 300
-```
-
-This workflow:
-1. Merges the additional mask (auto-resizing if needed)
-2. Extracts the rectangular region (100:900, 50:850)
-3. Applies circular attenuation (300 pixel radius)
+The radial cutoff is always applied **after** all other mask operations.
 
 # Cataloguing and Visualization
 

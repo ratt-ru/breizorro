@@ -69,6 +69,12 @@ jobs:
         # Test with merge, remove islands, and numbering
         uv run breizorro -r mypipelinerun_circinus_p3_3-MFS-image.fits -t 10 --merge test.mask.fits,test.mask.rgn --remove-islands 19,21,14h16m20.3:-65d42m07 --number-islands --outfile test.numbered.fits
         
+        # Test catalog generation with centroid fitting (default, most robust)
+        uv run breizorro -r mypipelinerun_circinus_p3_3-MFS-image.fits --outcatalog test_centroid.cat --source-fitting centroid --outfile test_centroid.fits
+        
+        # Test catalog generation with Gaussian fitting
+        uv run breizorro -r mypipelinerun_circinus_p3_3-MFS-image.fits --outcatalog test_gaussian.cat --source-fitting gaussian --outfile test_gaussian.fits
+        
         # Test radial cutoff feature (beam attenuation)
         uv run breizorro -r mypipelinerun_circinus_p3_3-MFS-image.fits --radial-cutoff 400 --outfile test.radial.fits
         

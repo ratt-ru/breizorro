@@ -99,6 +99,12 @@ cabs:
       beam-size:
         info: "Average beam size in arcsec if missing in the image header"
         dtype: float
+      source-fitting:
+        info: "Source fitting method for catalog generation"
+        dtype: str
+        default: centroid
+        abbreviation: sf
+        choices: [centroid, gaussian, moments, windowed]
       gui:
         info: "Open mask in bokeh html gui"
         dtype: bool

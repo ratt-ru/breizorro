@@ -29,9 +29,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-all = ["bokeh", "photutils", "scikit-image"]
+all = ["bokeh", "photutils", "scikit-image", "dask[bag]>=2024.1.0"]
 gui = ["bokeh"]
-catalog = ["photutils", "scikit-image"]
+catalog = ["photutils", "scikit-image", "dask[bag]>=2024.1.0"]
 
 [project.urls]
 Homepage = "https://github.com/ratt-ru/breizorro"

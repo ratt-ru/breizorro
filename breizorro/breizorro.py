@@ -134,6 +134,7 @@ def main(
     sum_peak,
     ncpu,
     beam_size,
+    source_fitting,
     gui,
     outfile,
     outcatalog,
@@ -212,10 +213,51 @@ def main(
         return fits, regs
 
     def reproject_mask_to_reference(mask_data, mask_header):
+        # First check: shapes must match
+        shapes_match = mask_data.shape == mask_image.shape
+        
+        # Second check: WCS must be compatible
+        wcs_match = False
         try:
             mask_wcs = WCS(mask_header)
             while len(mask_wcs.array_shape) > 2:
                 mask_wcs = mask_wcs.dropaxis(len(mask_wcs.array_shape) - 1)
+            
+            # Check if WCS are effectively the same by comparing key properties
+            # 1. Check pixel scales (cdelt or cd matrix)
+            ref_pixscale = wcs.pixel_scale_matrix
+            mask_pixscale = mask_wcs.pixel_scale_matrix
+            pixscale_match = np.allclose(ref_pixscale, mask_pixscale, rtol=1e-6)
+            
+            # 2. Check reference pixels (crpix)
+            crpix_match = np.allclose(wcs.wcs.crpix, mask_wcs.wcs.crpix, rtol=1e-6)
+            
+            # 3. Check reference values (crval) - sky coordinates
+            crval_match = np.allclose(wcs.wcs.crval, mask_wcs.wcs.crval, rtol=1e-9)
+            
+            # 4. Check projection type (ctype)
+            ctype_match = (wcs.wcs.ctype == mask_wcs.wcs.ctype).all()
+            
+            wcs_match = pixscale_match and crpix_match and crval_match and ctype_match
+            
+            if wcs_match and shapes_match:
+                LOGGER.info("Mask shape and WCS match reference, skipping reprojection")
+                return mask_data
+            elif shapes_match and not wcs_match:
+                LOGGER.info("Mask shape matches but WCS differs, reprojecting...")
+            else:
+                LOGGER.info(f"Reprojecting mask from shape {mask_data.shape} to {mask_image.shape}")
+                
+        except Exception as wcs_check_exc:
+            LOGGER.debug(f"WCS comparison failed: {wcs_check_exc}, proceeding with reprojection check")
+        
+        # Need to reproject
+        try:
+            if 'mask_wcs' not in locals():
+                mask_wcs = WCS(mask_header)
+                while len(mask_wcs.array_shape) > 2:
+                    mask_wcs = mask_wcs.dropaxis(len(mask_wcs.array_shape) - 1)
+                    
             reprojected, _ = reproject_interp(
                 (mask_data, mask_wcs),
                 wcs,
@@ -409,8 +451,8 @@ def main(
         limiting_flux = noise * threshold
         catalog_out = f"# cutt-off flux  (mJy/beam): {round(limiting_flux * 1000, 2)} \n"
         f.write(catalog_out)
-        LOGGER.info("Submitting distributed tasks for cataloguing. This might take a while...")
-        source_list = multiprocess_contours(contours, image_data, fitsinfo, noise, ncpu)
+        LOGGER.info(f"Submitting distributed tasks for cataloguing (method: {source_fitting}). This might take a while...")
+        source_list = multiprocess_contours(contours, image_data, fitsinfo, noise, ncpu, source_fitting)
         catalog_out = f"# freq0 (Hz): {fitsinfo['freq0']} \n"
         f.write(catalog_out)
         catalog_out = f"# number of sources detected: {len(source_list)} \n"

@@ -4,7 +4,7 @@ version = "0.2.1"
 description = "Creates a binary mask given a FITS image"
 authors = [
     { name = "Ian Heywood", email = "ian.heywood@physics.ox.ac.uk" },
-    { name = "RATT", email = "ratt@ru.ac.za" }
+    { name = "RATT" }
 ]
 readme = "README.rst"
 license = { text = "GNU GPL v3" }

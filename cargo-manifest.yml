@@ -1,0 +1,57 @@
+# Breizorro Cargo Manifest
+# Defines image versions and build configurations for different breizorro releases
+# Following the cult-cargo pattern: https://github.com/caracal-pipeline/cult-cargo
+
+images:
+  breizorro:
+    # Specific version releases
+    versions:
+      # Stable release versions
+      '0.2.1':
+        registry: ghcr.io
+        name: ratt-ru/breizorro
+        version: '0.2.1'
+        package: breizorro==0.2.1
+        
+      '0.2.0':
+        registry: ghcr.io
+        name: ratt-ru/breizorro
+        version: '0.2.0'
+        package: breizorro==0.2.0
+        
+      # Latest stable (default)
+      latest:
+        registry: ghcr.io
+        name: ratt-ru/breizorro
+        version: latest
+        package: breizorro[all]
+        
+      # Development branches
+      updates:
+        registry: ghcr.io
+        name: ratt-ru/breizorro
+        version: updates
+        package: git+https://github.com/ratt-ru/breizorro@updates
+        
+      main:
+        registry: ghcr.io
+        name: ratt-ru/breizorro
+        version: main
+        package: git+https://github.com/ratt-ru/breizorro@main
+        
+    # Default version to use if not specified
+    default: latest
+    
+    # Optional features/extras
+    extras:
+      all:
+        description: "All optional dependencies (catalog + GUI)"
+        package_suffix: "[all]"
+        
+      catalog:
+        description: "Catalog generation with photutils, scikit-image, dask"
+        package_suffix: "[catalog]"
+        
+      gui:
+        description: "GUI support with bokeh"
+        package_suffix: "[gui]"

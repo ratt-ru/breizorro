@@ -2,6 +2,10 @@ cabs:
   breizorro:
     info: "Mask creation and manipulation for radio astronomy images (https://github.com/ratt-ru/breizorro)"
     command: breizorro
+    image:
+      registry: ghcr.io
+      name: ratt-ru/breizorro
+      version: latest
     inputs:
       restored-image:
         info: "Restored image file from which to build the mask"

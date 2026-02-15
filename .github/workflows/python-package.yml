@@ -84,4 +84,34 @@ jobs:
         # Test fill holes
         uv run breizorro -r mypipelinerun_circinus_p3_3-MFS-image.fits --fill-holes --outfile test.filled.fits
 
+    - name: Install Stimela 2
+      run: |
+        pip install stimela
+
+    - name: Install Apptainer
+      uses: eWaterCycle/setup-apptainer@v2
+      with:
+        apptainer-version: latest
+
+    - name: Build breizorro container
+      run: |
+        docker build -t breizorro:test .
+
+    - name: Build Singularity image
+      run: |
+        apptainer build /tmp/breizorro-test.sif docker-daemon://breizorro:test
+
+    - name: Test Stimela 2 Integration
+      run: |
+        cat > /tmp/breizorro-image-override.yml <<'EOF'
+        cabs:
+          breizorro:
+            image:
+              path: /tmp/breizorro-test.sif
+        EOF
+        stimela run -S breizorro::breizorro.yaml /tmp/breizorro-image-override.yml \
+          restored-image=mypipelinerun_circinus_p3_3-MFS-image.fits \
+          threshold=6.5 \
+          outfile=test_mask_stimela.fits
+
 

@@ -389,6 +389,7 @@ tests = [
     { name = "pytest", version = "8.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "pytest", version = "9.0.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
     { name = "pytest-cov" },
+    { name = "pyyaml" },
     { name = "ruff" },
 ]
 
@@ -422,6 +423,7 @@ tests = [
     { name = "flake8" },
     { name = "pytest", specifier = ">=7.0" },
     { name = "pytest-cov" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "ruff" },
 ]
 

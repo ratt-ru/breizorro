@@ -166,7 +166,7 @@ class TestIslandOperations:
 
     def test_island_counting(self):
         """Test counting disconnected islands"""
-        from scipy.ndimage.measurements import label
+        from scipy.ndimage import label
 
         mask = np.zeros((50, 50))
         # Create 3 separate islands
@@ -180,7 +180,7 @@ class TestIslandOperations:
 
     def test_island_labeling(self):
         """Test island labeling with unique IDs"""
-        from scipy.ndimage.measurements import label
+        from scipy.ndimage import label
 
         mask = np.zeros((50, 50))
         mask[5:10, 5:10] = 1
@@ -197,7 +197,7 @@ class TestIslandOperations:
 
     def test_island_removal(self):
         """Test removing specific islands"""
-        from scipy.ndimage.measurements import label
+        from scipy.ndimage import label
 
         mask = np.zeros((50, 50))
         mask[5:10, 5:10] = 1
@@ -220,7 +220,7 @@ class TestMorphologicalOperations:
 
     def test_dilation(self):
         """Test mask dilation"""
-        from scipy.ndimage.morphology import binary_dilation
+        from scipy.ndimage import binary_dilation
 
         mask = np.zeros((50, 50))
         mask[24:26, 24:26] = 1  # Small 2x2 square
@@ -233,7 +233,7 @@ class TestMorphologicalOperations:
 
     def test_erosion(self):
         """Test mask erosion"""
-        from scipy.ndimage.morphology import binary_erosion
+        from scipy.ndimage import binary_erosion
 
         mask = np.zeros((50, 50))
         mask[10:40, 10:40] = 1  # Large square
@@ -246,7 +246,7 @@ class TestMorphologicalOperations:
 
     def test_fill_holes(self):
         """Test filling holes in mask"""
-        from scipy.ndimage.morphology import binary_fill_holes
+        from scipy.ndimage import binary_fill_holes
 
         # Create a mask with a hole
         mask = np.ones((50, 50))

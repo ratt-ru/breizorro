@@ -401,7 +401,7 @@ def main(
             # Convert the pixel coordinates to Sky coordinates
             contour_sky = wcs.pixel_to_world(contour_pixels[:, 1], contour_pixels[:, 0])
             # Create a Polygon region from the Sky coordinates
-            polygon_region = PolygonSkyRegion(vertices=contour_sky, meta={"label": "Region"})
+            polygon_region = regions.PolygonSkyRegion(vertices=contour_sky, meta={"label": "Region"})
             # Add the polygon region to the list
             polygon_regions.append(polygon_region)
         LOGGER.info(f"Number of regions found: {len(polygon_regions)}")

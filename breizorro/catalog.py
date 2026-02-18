@@ -97,7 +97,7 @@ def process_contour(contour, image_data, fitsinfo, noise_out, source_fitting="ce
     pix_size = fitsinfo["ddec"] * 3600.0
     bmaj, bmin, _ = np.array(fitsinfo["b_size"]) * 3600.0
     mean_beam = 0.5 * (bmaj + bmin)
-    pix_beam = calculate_beam_area(bmaj / 2, bmin / 2, pix_size)
+    pix_beam = calculate_beam_area(bmaj, bmin, pix_size)
     wcs = fitsinfo["wcs"]
     while len(wcs.array_shape) > 2:
         wcs = wcs.dropaxis(len(wcs.array_shape) - 1)
@@ -115,7 +115,7 @@ def process_contour(contour, image_data, fitsinfo, noise_out, source_fitting="ce
         nndata = data  # np.flip(data, axis=0)
         # nndata = nndata[~np.isnan(nndata)]
         total_flux = np.sum(nndata[nndata != -0.0]) / pix_beam
-        peak_flux = nndata.max() / pix_beam
+        peak_flux = nndata.max()
     except (ValueError, ZeroDivisionError):
         peak_flux = 0.0
     if total_flux:

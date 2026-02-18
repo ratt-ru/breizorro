@@ -268,23 +268,22 @@ def maxDist(contour, pixel_size, x_centroid, y_centroid):
 
 def calculate_beam_area(bmaj, bmin, pix_size):
     """
-    Calculate the area of an ellipse represented by its major and minor axes,
-    given the pixel size.
+    Calculate the Gaussian beam area in square pixels.
 
     Parameters:
-        bmaj (float): Major axis of the ellipse in arcseconds.
-        bmin (float): Minor axis of the ellipse in arcseconds.
+        bmaj (float): FWHM major axis in arcseconds.
+        bmin (float): FWHM minor axis in arcseconds.
         pix_size (float): Pixel size in arcseconds.
 
     Returns:
-        area (float): Calculated area of the ellipse in square pixels.
+        area (float): Gaussian beam area in square pixels.
     """
-    # Calculate the semi-major and semi-minor axes in pixels
+    # Convert FWHM axes to pixels
     a_pixels = bmaj / pix_size
     b_pixels = bmin / pix_size
 
-    # Calculate the area of the ellipse using the formula: π * a * b
-    area = np.pi * a_pixels * b_pixels
+    # Gaussian beam area: (pi / (4 ln 2)) * FWHM_maj * FWHM_min
+    area = (np.pi / (4.0 * np.log(2.0))) * a_pixels * b_pixels
 
     return area
 

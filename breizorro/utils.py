@@ -345,12 +345,11 @@ def match_mask_shape(mask_to_match, target_shape):
 
 def apply_radial_cutoff(mask, radius_pixels):
     """
-    Zero out everything beyond a circular radius from the center of the mask.
-    This imitates beam attenuation.
+    Zero out everything beyond a circular radius from the centre of the mask.
 
     Parameters:
     mask (ndarray): The mask to apply radial cutoff to
-    radius_pixels (float): Radius in pixels from center
+    radius_pixels (float): Radius in pixels from centre
 
     Returns:
     ndarray: The mask with radial cutoff applied
@@ -364,7 +363,7 @@ def apply_radial_cutoff(mask, radius_pixels):
     # Create coordinate grids
     y, x = np.ogrid[:h, :w]
 
-    # Calculate distance from center for each pixel
+    # Calculate distance from centre for each pixel
     dist_from_center = np.sqrt((x - center_x) ** 2 + (y - center_y) ** 2)
 
     # Create circular mask

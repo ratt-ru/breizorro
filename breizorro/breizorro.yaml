@@ -97,14 +97,14 @@ cabs:
         info: "Sum-to-peak ratio of flux islands to mask in original image"
         dtype: float
       ncpu:
-        info: "Number of processors to use for cataloging"
+        info: "Number of processors to use for cataloguing"
         dtype: int
         abbreviation: j
       beam-size:
         info: "Average beam size in arcsec if missing in the image header"
         dtype: float
       source-fitting:
-        info: "Source fitting method for catalog generation"
+        info: "Source fitting method for catalogue generation"
         dtype: str
         default: centroid
         abbreviation: sf
@@ -122,7 +122,7 @@ cabs:
         abbreviation: o
         suppress_cli_default: true
       outcatalog:
-        info: "Generate a catalog based on the region mask"
+        info: "Generate a catalogue based on the region mask"
         dtype: File
         required: false
       outregion:

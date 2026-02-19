@@ -22,7 +22,7 @@ Options:
   --merge TEXT                    Merge one or more masks or region files
   --subtract TEXT                 Subtract one or more masks or region files
   -rc, --radial-cutoff FLOAT      Zero out mask beyond this radius in pixels
-                                  from center (imitates beam attenuation)
+                                  from centre (imitates beam attenuation)
   --number-islands / --no-number-islands
                                   Number the islands detected
   --remove-islands TEXT           Remove islands from input mask (list by
@@ -42,13 +42,13 @@ Options:
   --fill-holes / --no-fill-holes  Fill holes (closed regions) in the mask
   --sum-peak FLOAT                Sum-to-peak ratio of flux islands to mask in
                                   original image
-  --ncpu INTEGER                  Number of processors to use for cataloging
+  --ncpu INTEGER                  Number of processors to use for cataloguing
   --beam-size FLOAT               Average beam size in arcsec if missing in
                                   the image header
   --gui / --no-gui                Open mask in bokeh html gui
   --outfile PATH                  Suffix for the mask image (default based on
                                   input name)
-  --outcatalog PATH               Generate a catalog based on the region mask
+  --outcatalog PATH               Generate a catalogue based on the region mask
   --outregion PATH                Generate polygon regions from the mask
   --help                          Show this message and exit.
 ```
@@ -99,19 +99,19 @@ Simulate beam attenuation by zeroing everything beyond a specified circular radi
 breizorro -r circinus-MFS-image.fits --radial-cutoff 200
 ```
 
-The `--radial-cutoff` (or `-rc`) parameter accepts a radius in pixels from the center of the image. This creates a circular mask that zeros out all pixels beyond the specified radius, which is useful for:
+The `--radial-cutoff` (or `-rc`) parameter accepts a radius in pixels from the centre of the image. This creates a circular mask that zeros out all pixels beyond the specified radius, which is useful for:
 
 - Imitating the natural beam attenuation in radio observations
-- Removing edge effects and artifacts
+- Removing edge effects and artefacts
 - Focusing analysis on the central, more sensitive region of observations
 
 The radial cutoff is always applied **after** all other mask operations.
 
-# Cataloguing and Visualization
+# Cataloguing and Visualisation
 
 Breizorro enables catalogue generation from extracted regions, saving source properties to an ASCII/text file.
-This is particularly useful for analyzing fields dominated by point sources.
-By efficiently parameterizing and cataloguing compact sources, Breizorro enables rapid cross-matching.
+This is particularly useful for analysing fields dominated by point sources.
+By efficiently parameterising and cataloguing compact sources, Breizorro enables rapid cross-matching.
 
 ```
 breizorro -r deep2-MFS-image.fits --outcatalog deep2.txt
@@ -144,43 +144,24 @@ src11 61.56419377531346 -80.18249455745902 0.0022 0.0001 10.77 0.0 158.2
 
 ---
 
-### ✅ 1. Source Fitting Methods Added
+### 1. Source Fitting Methods Added
 
 **New Parameter**: `--source-fitting` / `-sf`
 
-Four methods now available:
-- **centroid** (DEFAULT) - Center of mass, fastest, most robust
+Four methods are now available:
+- **centroid** (DEFAULT) - Centre of mass, fastest, most robust
 - **gaussian** - 2D Gaussian fitting, highest accuracy, can hang (auto-fallback)
-- **moments** - Image moments, fast and robust alternative
+- **moments** - Image moments, a fast and robust alternative
 - **windowed** - Windowed centroid around peak, balanced
-
-### ✅ 2. Catalog Testing in CI/CD
-
-GitHub Actions now automatically tests:
-- Catalog generation with `--outcatalog`
-- Both centroid and Gaussian fitting methods
-- Real FITS data validation
-
-### ✅ 3. Local Testing Script
-
-Created `test_local_e2e.sh` for local development testing
-
-### ✅ 4. Dask Optimization Included
-
-Dask is now part of `[catalog]` optional dependencies for:
-- 70% cleaner code
-- 10-20% performance improvement
-- Better error handling
-- Future scalability to HPC/cloud
 
 ---
 
-## 🚨 IMPORTANT: Installation
+## IMPORTANT: Installation
 
-### Catalog features require additional dependencies!
+### Catalogue features require additional dependencies!
 
 ```bash
-# For catalog generation (RECOMMENDED)
+# For catalogue generation (RECOMMENDED)
 pip install breizorro[catalog]
 
 # For ALL features (catalog + GUI)
@@ -202,7 +183,7 @@ uv pip install breizorro[all]
 
 ---
 
-## 📝 Advanced Usage Examples
+## Advanced Usage Examples
 
 ### Catalog Generation (Requires [catalog])
 
@@ -225,7 +206,7 @@ breizorro -r image.fits --outcatalog sources.cat --outregion sources.rgn
 
 ---
 
-## 🔬 Source Fitting Method Comparison
+## Source Fitting Method Comparison
 
 | Method | Speed | Accuracy | Robustness | Hangs? | When to Use |
 |--------|-------|----------|------------|--------|-------------|
@@ -235,13 +216,6 @@ breizorro -r image.fits --outcatalog sources.cat --outregion sources.rgn
 | windowed | ⚡⚡ | ✓✓ | ✓✓ | Never | Bright compact sources |
 
 ---
-
-## 📚 Additional Documentation
-
-| Document | Purpose |
-|----------|---------|
-| `INSTALLATION.md` | Complete installation guide |
-| `test_local_e2e.sh` | Local testing script |
 
 # Contributors
 

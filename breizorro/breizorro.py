@@ -13,8 +13,7 @@ from astropy.coordinates import SkyCoord
 from astropy.io import fits
 from astropy.wcs import WCS
 from reproject import reproject_interp
-from scipy.ndimage.measurements import find_objects, label
-from scipy.ndimage.morphology import binary_dilation, binary_erosion, binary_fill_holes
+from scipy.ndimage import binary_dilation, binary_erosion, binary_fill_holes, find_objects, label
 
 from breizorro.utils import (
     apply_radial_cutoff,

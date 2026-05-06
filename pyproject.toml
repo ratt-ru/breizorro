@@ -20,12 +20,13 @@ classifiers = [
 ]
 dependencies = [
     "astropy",
+    "click>=8.1.3",
     "numpy",
     "omegaconf",
     "reproject",
     "regions>=0.8",
-    "scipy>=1.13.1",
-    "scabha @ git+https://github.com/caracal-pipeline/scabha.git",
+    "scabha>-2.0.0",
+    "scipy>=1.13.1"
 ]
 
 [project.optional-dependencies]

@@ -91,7 +91,7 @@ jobs:
     - name: Install Apptainer
       uses: eWaterCycle/setup-apptainer@v2
       with:
-        apptainer-version: latest
+        apptainer-version: 1.4.4
 
     - name: Build breizorro container
       run: |

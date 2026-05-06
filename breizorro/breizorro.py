@@ -68,7 +68,7 @@ def make_noise_map(restored_image, boxsize):
     f = 0.5 * (1.0 + scipy.special.erf(x / np.sqrt(2.0)))
     F = 1.0 - (1.0 - f) ** n
     ratio = np.abs(np.interp(0.5, F, x))
-    noise = -scipy.ndimage.filters.minimum_filter(restored_image, box) / ratio
+    noise = -scipy.ndimage.minimum_filter(restored_image, box) / ratio
     negative_mask = noise < 0.0
     noise[negative_mask] = 1.0e-10
     median_noise = np.median(noise)

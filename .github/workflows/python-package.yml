@@ -87,7 +87,7 @@ jobs:
     - name: Install Stimela 2
       run: |
         uv pip install stimela
-        uv pip install -U git+https://github.com/caracal-pipeline/stimela.git@2.2.0rc0", # Remove when stimela is published
+        uv pip install -U git+https://github.com/caracal-pipeline/stimela.git@2.2.0rc0 # Remove when stimela is published
 
     - name: Install Apptainer
       uses: eWaterCycle/setup-apptainer@v2
@@ -114,5 +114,3 @@ jobs:
           restored-image=mypipelinerun_circinus_p3_3-MFS-image.fits \
           threshold=6.5 \
           outfile=test_mask_stimela.fits
-
-

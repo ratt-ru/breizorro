@@ -2,8 +2,6 @@ import logging
 import re
 import shutil
 import sys
-import warnings
-from argparse import ArgumentParser
 
 import numpy as np
 import regions
@@ -15,17 +13,7 @@ from astropy.wcs import WCS
 from reproject import reproject_interp
 from scipy.ndimage import binary_dilation, binary_erosion, binary_fill_holes, find_objects, label
 
-from breizorro.utils import (
-    apply_radial_cutoff,
-    calculate_beam_area,
-    deg2dec,
-    deg2ra,
-    fitsInfo,
-    format_source_coordinates,
-    get_image_data,
-    get_source_size,
-    match_mask_shape,
-)
+from breizorro.utils import apply_radial_cutoff, fitsInfo, get_image_data, match_mask_shape
 
 
 def create_logger():
@@ -66,8 +54,8 @@ def make_noise_map(restored_image, boxsize):
     n = boxsize**2.0
     x = np.linspace(-10, 10, 1000)
     f = 0.5 * (1.0 + scipy.special.erf(x / np.sqrt(2.0)))
-    F = 1.0 - (1.0 - f) ** n
-    ratio = np.abs(np.interp(0.5, F, x))
+    ff = 1.0 - (1.0 - f) ** n
+    ratio = np.abs(np.interp(0.5, ff, x))
     noise = -scipy.ndimage.minimum_filter(restored_image, box) / ratio
     negative_mask = noise < 0.0
     noise[negative_mask] = 1.0e-10
@@ -214,31 +202,31 @@ def main(
     def reproject_mask_to_reference(mask_data, mask_header):
         # First check: shapes must match
         shapes_match = mask_data.shape == mask_image.shape
-        
+
         # Second check: WCS must be compatible
         wcs_match = False
         try:
             mask_wcs = WCS(mask_header)
             while len(mask_wcs.array_shape) > 2:
                 mask_wcs = mask_wcs.dropaxis(len(mask_wcs.array_shape) - 1)
-            
+
             # Check if WCS are effectively the same by comparing key properties
             # 1. Check pixel scales (cdelt or cd matrix)
             ref_pixscale = wcs.pixel_scale_matrix
             mask_pixscale = mask_wcs.pixel_scale_matrix
             pixscale_match = np.allclose(ref_pixscale, mask_pixscale, rtol=1e-6)
-            
+
             # 2. Check reference pixels (crpix)
             crpix_match = np.allclose(wcs.wcs.crpix, mask_wcs.wcs.crpix, rtol=1e-6)
-            
+
             # 3. Check reference values (crval) - sky coordinates
             crval_match = np.allclose(wcs.wcs.crval, mask_wcs.wcs.crval, rtol=1e-9)
-            
+
             # 4. Check projection type (ctype)
             ctype_match = (wcs.wcs.ctype == mask_wcs.wcs.ctype).all()
-            
+
             wcs_match = pixscale_match and crpix_match and crval_match and ctype_match
-            
+
             if wcs_match and shapes_match:
                 LOGGER.info("Mask shape and WCS match reference, skipping reprojection")
                 return mask_data
@@ -246,7 +234,7 @@ def main(
                 LOGGER.info("Mask shape matches but WCS differs, reprojecting...")
             else:
                 LOGGER.info(f"Reprojecting mask from shape {mask_data.shape} to {mask_image.shape}")
-                
+
         except Exception as wcs_check_exc:
             LOGGER.debug(f"WCS comparison failed: {wcs_check_exc}, proceeding with reprojection check")
         

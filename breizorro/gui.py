@@ -1,16 +1,11 @@
-import numpy as np
-from bokeh.io import curdoc, export_png
+from bokeh.io import curdoc
 from bokeh.layouts import row
 from bokeh.models import (
-    BoxEditTool,
     CustomJS,
     DataTable,
-    FreehandDrawTool,
     HoverTool,
-    Label,
     LabelSet,
     TableColumn,
-    Toggle,
 )
 from bokeh.plotting import ColumnDataSource, figure, output_file, show
 
@@ -62,29 +57,16 @@ def display(imagename, mask_image, outcatalog, source_list):
     fitsinfo = fitsInfo(imagename)
     # Origin coordinates
     origin_ra, origin_dec = fitsinfo["centre"]
-    # Pixel width in degrees
-    pixel_width = fitsinfo["dra"]
-    pixel_height = fitsinfo["ddec"]
-    # Calculate the extent of the image in degrees
-    # We assume a square image for simplicity
-    extent_x = fitsinfo["numPix"] * pixel_width  # Assume equal pixels in each dimension
-    extent_y = fitsinfo["numPix"] * pixel_height  # Assume equal pixels in each dimension
     # Ensure RA is always positive (in degrees, 0 to 360)
     origin_ra = origin_ra % 360
-    # Specify the coordinates for the image
-    x_range = (origin_ra - extent_x / 2.0, origin_ra + extent_x / 2.0)
-    y_range = (origin_dec - extent_y / 2.0, origin_dec + extent_y / 2.0)
     if outcatalog:
         # Extracting data from source_list
-        x_coords = [float(d[1].split(" ")[0]) for d in source_list]
+        # x_coords = [float(d[1].split(" ")[0]) for d in source_list]
         y_coords = [float(d[1].split(" ")[1]) for d in source_list]
         labels = [
             f"{format_source_coordinates(float(d[1].split(' ')[0]), float(d[1].split(' ')[1]))}"
             for d in source_list
         ]
-
-        # Create data
-        source = ColumnDataSource(data=dict(x=x_coords, y=y_coords, label=labels))
 
         # Assuming `source_list` is already populated with your data
         # Example source_list: [(ra, 'ra dec i i_err emaj_s emin_s pa_d', flag)]
@@ -143,16 +125,6 @@ def display(imagename, mask_image, outcatalog, source_list):
             match_aspect=True,
             tooltips=[("x", "$x"), ("y", "$y"), ("value", "@image")],
         )
-        # Plot the image
-        image_renderer = p.image(
-            image=[np.flip(mask_image, axis=1)],
-            x=x_range[0],
-            y=y_range[0],
-            dw=fitsinfo["numPix"] * fitsinfo["dra"],
-            dh=fitsinfo["numPix"] * fitsinfo["ddec"],
-            palette="Greys256",
-            level="image",
-        )
         scatter_renderer = p.scatter(
             "ra_deg",
             "dec_deg",
@@ -162,7 +134,6 @@ def display(imagename, mask_image, outcatalog, source_list):
             legend_label="Detection",
             level="overlay",
         )
-
         # Add labels to the scatter points (optional, can hide later as needed)
         labels = LabelSet(
             x="RA",

@@ -264,7 +264,8 @@ class TestMinimumSize:
 
     def test_remove_small_islands(self):
         """Test removing islands smaller than threshold"""
-        from scipy.ndimage import label, sum as ndsum
+        from scipy.ndimage import label
+        from scipy.ndimage import sum as ndsum
 
         mask = np.zeros((100, 100))
         # Large island

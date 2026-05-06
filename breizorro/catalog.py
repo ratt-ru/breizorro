@@ -1,17 +1,14 @@
+import logging
 from multiprocessing import Process, Queue
-from operator import attrgetter, itemgetter
+from operator import itemgetter
 
 import numpy as np
 from photutils import centroids
-from regions import PolygonPixelRegion, PolygonSkyRegion
+from regions import PolygonSkyRegion
 
-from breizorro.utils import (
-    calculate_beam_area,
-    deg2dec,
-    deg2ra,
-    fitsInfo,
-    get_source_size,
-)
+from breizorro.utils import calculate_beam_area, get_source_size
+
+logger = logging.getLogger(__name__)
 
 
 def centroid_gaussian(data):
@@ -23,6 +20,7 @@ def centroid_gaussian(data):
         return centroids.centroid_2dg(data)
     except Exception as e:
         # Fallback to center of mass if Gaussian fitting fails
+        logger.warning(f"Gaussian centroid fitting failed: {e}.\nFalling back to center of mass.")
         return centroids.centroid_com(data)
 
 
@@ -49,22 +47,22 @@ def centroid_windowed(data, window_size=None):
     """
     # Find peak location
     peak_idx = np.unravel_index(np.argmax(data), data.shape)
-    
+
     # Set window size based on data size if not provided
     if window_size is None:
         window_size = min(data.shape) // 4
-    
+
     # Extract window around peak
     y_start = max(0, peak_idx[0] - window_size)
     y_end = min(data.shape[0], peak_idx[0] + window_size)
     x_start = max(0, peak_idx[1] - window_size)
     x_end = min(data.shape[1], peak_idx[1] + window_size)
-    
+
     windowed_data = data[y_start:y_end, x_start:x_end]
-    
+
     # Calculate COM on window
     com_y, com_x = centroids.centroid_com(windowed_data)
-    
+
     # Adjust back to original coordinates
     return (com_y + y_start, com_x + x_start)
 
@@ -72,7 +70,7 @@ def centroid_windowed(data, window_size=None):
 def get_centroid_method(method_name="centroid"):
     """
     Return the centroid fitting method function.
-    
+
     Available methods:
     - gaussian: Gaussian-weighted (can hang, has COM fallback)
     - centroid: Center of mass (fast, recommended)
@@ -86,14 +84,13 @@ def get_centroid_method(method_name="centroid"):
         "moments": centroid_moments,
         "windowed": centroid_windowed,
     }
-    
+
     method = methods.get(method_name.lower(), centroid_com)
     return method
 
 
 def process_contour(contour, image_data, fitsinfo, noise_out, source_fitting="centroid"):
     use_max = 0
-    lon = 0
     pix_size = fitsinfo["ddec"] * 3600.0
     bmaj, bmin, _ = np.array(fitsinfo["b_size"]) * 3600.0
     mean_beam = 0.5 * (bmaj + bmin)
@@ -124,18 +121,18 @@ def process_contour(contour, image_data, fitsinfo, noise_out, source_fitting="ce
         ten_pc_error = 0.1 * total_flux  # a 10% error term as an additional conservative estimate
         beam_error = np.sqrt(source_beams) * noise_out
         flux_density_error = np.sqrt(ten_pc_error**2 + beam_error**2)  # combined error
-        
+
         # Calculate weighted centroid using selected method
         centroid_method = get_centroid_method(source_fitting)
         try:
             _centroids = centroid_method(data)
         except Exception as e:
             # Fallback to center of mass if any fitting method fails
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(f"Centroid fitting with {source_fitting} failed: {e}. Falling back to center of mass.")
+            logger.warning(
+                f"Centroid fitting with {source_fitting} failed: {e}. Falling back to center of mass."
+            )
             _centroids = centroid_com(data)
-        
+
         centroid_x, centroid_y = _centroids
         ra, dec = wcs.all_pix2world(centroid_x, centroid_y, 0)
         # Ensure RA is positive
@@ -155,7 +152,9 @@ def process_contour(contour, image_data, fitsinfo, noise_out, source_fitting="ce
     return (ra, catalog_out, use_max)
 
 
-def multiprocess_contours(contours, image_data, fitsinfo, noise_out, ncpu=None, source_fitting="centroid"):
+def multiprocess_contours(
+    contours, image_data, fitsinfo, noise_out, ncpu=None, source_fitting="centroid"
+):
 
     def contour_worker(input, output):
         for func, args in iter(input.get, "STOP"):
@@ -180,7 +179,9 @@ def multiprocess_contours(contours, image_data, fitsinfo, noise_out, ncpu=None, 
             for j in range(len(contour)):
                 x.append(contour[j][0])
                 y.append(contour[j][1])
-            TASKS.append((process_contour, (contour, image_data, fitsinfo, noise_out, source_fitting)))
+            TASKS.append(
+                (process_contour, (contour, image_data, fitsinfo, noise_out, source_fitting))
+            )
     task_queue = Queue()
     done_queue = Queue()
     # Submit tasks

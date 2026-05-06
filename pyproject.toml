@@ -1,6 +1,6 @@
 [project]
 name = "breizorro"
-version = "0.2.1"
+version = "0.3.0"
 description = "Creates a binary mask given a FITS image"
 authors = [
     { name = "Ian Heywood", email = "ian.heywood@physics.ox.ac.uk" },
@@ -8,7 +8,7 @@ authors = [
 ]
 readme = "README.rst"
 license = { text = "GNU GPL v3" }
-requires-python = ">=3.9,<3.13"
+requires-python = ">=3.9,<3.14"
 keywords = ["Astronomy", "Masking", "Imaging"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",

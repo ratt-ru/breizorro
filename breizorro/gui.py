@@ -64,8 +64,7 @@ def display(imagename, mask_image, outcatalog, source_list):
         # x_coords = [float(d[1].split(" ")[0]) for d in source_list]
         y_coords = [float(d[1].split(" ")[1]) for d in source_list]
         labels = [
-            f"{format_source_coordinates(float(d[1].split(' ')[0]), float(d[1].split(' ')[1]))}"
-            for d in source_list
+            f"{format_source_coordinates(float(d[1].split(' ')[0]), float(d[1].split(' ')[1]))}" for d in source_list
         ]
 
         # Assuming `source_list` is already populated with your data
@@ -83,9 +82,7 @@ def display(imagename, mask_image, outcatalog, source_list):
         }
 
         # Format RA and DEC to hh:mm:ss and dd:mm:ss
-        formatted_coords = [
-            format_source_coordinates(ra, dec) for ra, dec in zip(data["ra_deg"], data["dec_deg"])
-        ]
+        formatted_coords = [format_source_coordinates(ra, dec) for ra, dec in zip(data["ra_deg"], data["dec_deg"])]
         formatted_RA = [coord[0] for coord in formatted_coords]
         formatted_DEC = [coord[1] for coord in formatted_coords]
 

@@ -62,7 +62,7 @@ default-groups = ["tests", "docs"]
 allow-direct-references = true
 
 [tool.ruff]
-line-length = 100
+line-length = 120
 target-version = "py39"
 
 [tool.ruff.lint]

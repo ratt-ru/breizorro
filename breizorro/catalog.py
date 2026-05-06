@@ -128,9 +128,7 @@ def process_contour(contour, image_data, fitsinfo, noise_out, source_fitting="ce
             _centroids = centroid_method(data)
         except Exception as e:
             # Fallback to center of mass if any fitting method fails
-            logger.warning(
-                f"Centroid fitting with {source_fitting} failed: {e}. Falling back to center of mass."
-            )
+            logger.warning(f"Centroid fitting with {source_fitting} failed: {e}. Falling back to center of mass.")
             _centroids = centroid_com(data)
 
         centroid_x, centroid_y = _centroids
@@ -139,9 +137,7 @@ def process_contour(contour, image_data, fitsinfo, noise_out, source_fitting="ce
         if ra < 0:
             ra += 360
         source_flux = (round(total_flux, 5), round(flux_density_error, 5))
-        source_size = get_source_size(
-            contour, pix_size, mean_beam, image_data, total_peak_ratio, _centroids
-        )
+        source_size = get_source_size(contour, pix_size, mean_beam, image_data, total_peak_ratio, _centroids)
         # source_pos = format_source_coordinates(ra, dec)
         source = (ra, dec) + source_flux + source_size
         catalog_out = " ".join(str(src_prop) for src_prop in source)
@@ -152,9 +148,7 @@ def process_contour(contour, image_data, fitsinfo, noise_out, source_fitting="ce
     return (ra, catalog_out, use_max)
 
 
-def multiprocess_contours(
-    contours, image_data, fitsinfo, noise_out, ncpu=None, source_fitting="centroid"
-):
+def multiprocess_contours(contours, image_data, fitsinfo, noise_out, ncpu=None, source_fitting="centroid"):
 
     def contour_worker(input, output):
         for func, args in iter(input.get, "STOP"):
@@ -179,9 +173,7 @@ def multiprocess_contours(
             for j in range(len(contour)):
                 x.append(contour[j][0])
                 y.append(contour[j][1])
-            TASKS.append(
-                (process_contour, (contour, image_data, fitsinfo, noise_out, source_fitting))
-            )
+            TASKS.append((process_contour, (contour, image_data, fitsinfo, noise_out, source_fitting)))
     task_queue = Queue()
     done_queue = Queue()
     # Submit tasks

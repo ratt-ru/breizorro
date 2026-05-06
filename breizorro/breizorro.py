@@ -236,9 +236,7 @@ def main(
                 LOGGER.info(f"Reprojecting mask from shape {mask_data.shape} to {mask_image.shape}")
 
         except Exception as wcs_check_exc:
-            LOGGER.debug(
-                f"WCS comparison failed: {wcs_check_exc}, proceeding with reprojection check"
-            )
+            LOGGER.debug(f"WCS comparison failed: {wcs_check_exc}, proceeding with reprojection check")
 
         # Need to reproject
         try:
@@ -318,9 +316,7 @@ def main(
         LOGGER.info(f"Removing islands that occupy fewer than or equal to {minimum_size} pixels")
         mask_image = mask_image != 0
         island_labels, num_features = label(mask_image)
-        island_areas = np.array(
-            scipy.ndimage.sum(mask_image, island_labels, np.arange(island_labels.max() + 1))
-        )
+        island_areas = np.array(scipy.ndimage.sum(mask_image, island_labels, np.arange(island_labels.max() + 1)))
         min_mask = island_areas >= minimum_size
         mask_image = min_mask[island_labels.ravel()].reshape(island_labels.shape)
 
@@ -390,9 +386,7 @@ def main(
             # Convert the pixel coordinates to Sky coordinates
             contour_sky = wcs.pixel_to_world(contour_pixels[:, 1], contour_pixels[:, 0])
             # Create a Polygon region from the Sky coordinates
-            polygon_region = regions.PolygonSkyRegion(
-                vertices=contour_sky, meta={"label": "Region"}
-            )
+            polygon_region = regions.PolygonSkyRegion(vertices=contour_sky, meta={"label": "Region"})
             # Add the polygon region to the list
             polygon_regions.append(polygon_region)
         LOGGER.info(f"Number of regions found: {len(polygon_regions)}")
@@ -445,9 +439,7 @@ def main(
         LOGGER.info(
             f"Submitting distributed tasks for cataloguing (method: {source_fitting}). This might take a while..."
         )
-        source_list = multiprocess_contours(
-            contours, image_data, fitsinfo, noise, ncpu, source_fitting
-        )
+        source_list = multiprocess_contours(contours, image_data, fitsinfo, noise, ncpu, source_fitting)
         catalog_out = f"# freq0 (Hz): {fitsinfo['freq0']} \n"
         f.write(catalog_out)
         catalog_out = f"# number of sources detected: {len(source_list)} \n"

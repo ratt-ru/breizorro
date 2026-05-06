@@ -54,8 +54,8 @@ def make_noise_map(restored_image, boxsize):
     n = boxsize**2.0
     x = np.linspace(-10, 10, 1000)
     f = 0.5 * (1.0 + scipy.special.erf(x / np.sqrt(2.0)))
-    ff = 1.0 - (1.0 - f) ** n
-    ratio = np.abs(np.interp(0.5, ff, x))
+    F = 1.0 - (1.0 - f) ** n
+    ratio = np.abs(np.interp(0.5, F, x))
     noise = -scipy.ndimage.minimum_filter(restored_image, box) / ratio
     negative_mask = noise < 0.0
     noise[negative_mask] = 1.0e-10
@@ -236,15 +236,17 @@ def main(
                 LOGGER.info(f"Reprojecting mask from shape {mask_data.shape} to {mask_image.shape}")
 
         except Exception as wcs_check_exc:
-            LOGGER.debug(f"WCS comparison failed: {wcs_check_exc}, proceeding with reprojection check")
-        
+            LOGGER.debug(
+                f"WCS comparison failed: {wcs_check_exc}, proceeding with reprojection check"
+            )
+
         # Need to reproject
         try:
-            if 'mask_wcs' not in locals():
+            if "mask_wcs" not in locals():
                 mask_wcs = WCS(mask_header)
                 while len(mask_wcs.array_shape) > 2:
                     mask_wcs = mask_wcs.dropaxis(len(mask_wcs.array_shape) - 1)
-                    
+
             reprojected, _ = reproject_interp(
                 (mask_data, mask_wcs),
                 wcs,
@@ -388,7 +390,9 @@ def main(
             # Convert the pixel coordinates to Sky coordinates
             contour_sky = wcs.pixel_to_world(contour_pixels[:, 1], contour_pixels[:, 0])
             # Create a Polygon region from the Sky coordinates
-            polygon_region = regions.PolygonSkyRegion(vertices=contour_sky, meta={"label": "Region"})
+            polygon_region = regions.PolygonSkyRegion(
+                vertices=contour_sky, meta={"label": "Region"}
+            )
             # Add the polygon region to the list
             polygon_regions.append(polygon_region)
         LOGGER.info(f"Number of regions found: {len(polygon_regions)}")
@@ -438,8 +442,12 @@ def main(
         limiting_flux = noise * threshold
         catalog_out = f"# cutt-off flux  (mJy/beam): {round(limiting_flux * 1000, 2)} \n"
         f.write(catalog_out)
-        LOGGER.info(f"Submitting distributed tasks for cataloguing (method: {source_fitting}). This might take a while...")
-        source_list = multiprocess_contours(contours, image_data, fitsinfo, noise, ncpu, source_fitting)
+        LOGGER.info(
+            f"Submitting distributed tasks for cataloguing (method: {source_fitting}). This might take a while..."
+        )
+        source_list = multiprocess_contours(
+            contours, image_data, fitsinfo, noise, ncpu, source_fitting
+        )
         catalog_out = f"# freq0 (Hz): {fitsinfo['freq0']} \n"
         f.write(catalog_out)
         catalog_out = f"# number of sources detected: {len(source_list)} \n"

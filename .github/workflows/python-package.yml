@@ -86,7 +86,7 @@ jobs:
 
     - name: Install Stimela 2
       run: |
-        pip install stimela
+        uv pip install stimela
 
     - name: Install Apptainer
       uses: eWaterCycle/setup-apptainer@v2
@@ -109,7 +109,7 @@ jobs:
             image:
               path: /tmp/breizorro-test.sif
         EOF
-        stimela run -S breizorro::breizorro.yaml /tmp/breizorro-image-override.yml \
+        uv run stimela run -S breizorro::breizorro.yaml /tmp/breizorro-image-override.yml \
           restored-image=mypipelinerun_circinus_p3_3-MFS-image.fits \
           threshold=6.5 \
           outfile=test_mask_stimela.fits

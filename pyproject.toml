@@ -25,7 +25,7 @@ dependencies = [
     "omegaconf",
     "reproject",
     "regions>=0.8",
-    "scabha>=2.0.0",
+    "scabha>=2.2.0rc0",
     "scipy>=1.13.1"
 ]
 

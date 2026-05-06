@@ -177,7 +177,7 @@ uv pip install breizorro[all]
 | Package | Includes | Use Case |
 |---------|----------|----------|
 | `breizorro` | Basic masking | Simple mask operations |
-| `breizorro[catalog]` | + photutils, scikit-image, dask | **Source cataloging (MOST USERS)** |
+| `breizorro[catalog]` | + photutils, scikit-image | **Source cataloging (MOST USERS)** |
 | `breizorro[gui]` | + bokeh | Interactive GUI |
 | `breizorro[all]` | Everything above | Full feature set |
 

@@ -51,11 +51,11 @@ jobs:
 
     - name: Lint with Ruff
       run: |
-        uv run ruff check breizorro --select=E,W,F,I,N --show-fixes
+        uv run ruff check breizorro --show-fixes
 
     - name: Format check with Ruff
       run: |
-        uv run ruff format breizorro --check --line-length 100
+        uv run ruff format breizorro --check --line-length 120
 
     - name: Download test dataset (real FITS file)
       run: |

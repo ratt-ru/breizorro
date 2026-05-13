@@ -193,10 +193,10 @@ def main(
         except OSError:
             try:
                 regs = regions.Regions.read(filename)
-            except (OSError, ValueError):
-                msg = f"{merge} is neither a FITS file not a regions file"
+            except (OSError, ValueError) as exc:
+                msg = f"{filename} is neither a FITS file nor a regions file"
                 LOGGER.error(msg)
-                raise (msg)
+                raise ValueError(msg) from exc
         return fits, regs
 
     def reproject_mask_to_reference(mask_data, mask_header):
@@ -405,10 +405,10 @@ def main(
                 warnings.resetwarnings()
                 warnings.filterwarnings("ignore", category=UserWarning, append=True)
             from breizorro.catalog import multiprocess_contours
-        except ModuleNotFoundError:
+        except ModuleNotFoundError as exc:
             msg = "Running breizorro source detector requires optional dependencies, please re-install with: pip install breizorro[all]"
             LOGGER.error(msg)
-            raise (msg)
+            raise ModuleNotFoundError(msg) from exc
         source_list = []
         image_data, hdu_header = get_image_data(restored_image)
         fitsinfo = fitsInfo(restored_image)
@@ -421,7 +421,7 @@ def main(
             bmaj, bmin, _ = np.array(fitsinfo["b_size"]) * 3600.0
             mean_beam = 0.5 * (bmaj + bmin)
         else:
-            raise ("No beam information found. Specify mean beam in arcsec: --beam-size 6.5")
+            raise ValueError("No beam information found. Specify mean beam in arcsec: --beam-size 6.5")
 
         noise = np.median(noise_image)
         f = open(outcatalog, "w")
@@ -455,11 +455,11 @@ def main(
     if gui:
         try:
             from breizorro.gui import display
-        except ModuleNotFoundError:
+        except ModuleNotFoundError as exc:
             LOGGER.error(
                 "Running breizorro gui requires optional dependencies, please re-install with: pip install breizorro[gui]"
             )
-            raise ("Missing GUI dependencies")
+            raise ModuleNotFoundError("Missing GUI dependencies") from exc
 
         LOGGER.info("Loading Gui ...")
         display(input_file, mask_image, outcatalog, source_list)

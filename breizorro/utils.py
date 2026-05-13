@@ -297,15 +297,16 @@ def get_source_size(contour, pixel_size, mean_beam, image, int_peak_ratio, centr
     source_beam_ratio = p.area / mean_beam
     # first test for point source
     point_source = False
-    if (int_peak_ratio <= 0.2) or (src_angle[0] <= mean_beam):
+    # if the peak ratio is very low or the source size is smaller than the beam, it's likely a point source
+    if (int_peak_ratio <= 0.02) or (sorted(src_angle)[-1] < mean_beam):
         point_source = True
-    if source_beam_ratio <= 1.0:
+    if source_beam_ratio < 1.0:
         point_source = True
     if point_source:
         src_size = (0.0, 0.0, 0.0)
     else:
-        emaj = round(src_angle[0], 2)
-        emin = round(src_angle[-1], 2)
+        emaj = round(sorted(src_angle)[-1], 2)
+        emin = round(sorted(src_angle)[0], 2)
         pa = round(pos_angle, 2)
         src_size = (emaj, emin, pa)
     return src_size

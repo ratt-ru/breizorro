@@ -1,10 +1,11 @@
 import logging
-from multiprocessing import Process, Queue
+from multiprocessing import Pool
 from operator import itemgetter
 
 import numpy as np
 from photutils import centroids
 from regions import PolygonSkyRegion
+from tqdm import tqdm
 
 from breizorro.utils import calculate_beam_area, get_source_size
 
@@ -91,6 +92,8 @@ def get_centroid_method(method_name="centroid"):
 
 def process_contour(contour, image_data, fitsinfo, noise_out, source_fitting="centroid"):
     use_max = 0
+    ra = -np.inf
+    catalog_out = ""
     pix_size = fitsinfo["ddec"] * 3600.0
     bmaj, bmin, _ = np.array(fitsinfo["b_size"]) * 3600.0
     mean_beam = 0.5 * (bmaj + bmin)
@@ -114,13 +117,18 @@ def process_contour(contour, image_data, fitsinfo, noise_out, source_fitting="ce
         total_flux = np.sum(nndata[nndata != -0.0]) / pix_beam
         peak_flux = nndata.max()
     except (ValueError, ZeroDivisionError):
+        total_flux = 0.0
         peak_flux = 0.0
+    if not np.isfinite(total_flux) or total_flux == 0:
+        return (ra, catalog_out, use_max)
+
     if total_flux:
         total_peak_ratio = np.abs((total_flux - peak_flux) / total_flux)
         # Flux density error estimation
         ten_pc_error = 0.1 * total_flux  # a 10% error term as an additional conservative estimate
         beam_error = np.sqrt(source_beams) * noise_out
         flux_density_error = np.sqrt(ten_pc_error**2 + beam_error**2)  # combined error
+        peak_error = np.sqrt((0.1 * peak_flux) ** 2 + beam_error**2)
 
         # Calculate weighted centroid using selected method
         centroid_method = get_centroid_method(source_fitting)
@@ -137,62 +145,48 @@ def process_contour(contour, image_data, fitsinfo, noise_out, source_fitting="ce
         if ra < 0:
             ra += 360
         source_flux = (round(total_flux, 5), round(flux_density_error, 5))
+        source_peak = (round(peak_flux, 5), round(peak_error, 5))
         source_size = get_source_size(contour, pix_size, mean_beam, image_data, total_peak_ratio, _centroids)
-        # source_pos = format_source_coordinates(ra, dec)
-        source = (ra, dec) + source_flux + source_size
-        catalog_out = " ".join(str(src_prop) for src_prop in source)
-    else:
-        # Dummy source to be eliminated
 
-        catalog_out = ""
+        # For unresolved (point) sources, total_flux should equal peak_flux
+        if source_size[0] == 0.0 and source_size[1] == 0.0:
+            total_flux = peak_flux
+            flux_density_error = peak_error
+            source_flux = (round(total_flux, 5), round(flux_density_error, 5))
+        # source_pos = format_source_coordinates(ra, dec)
+        source = (ra, dec) + source_flux + source_peak + source_size
+        catalog_out = " ".join(str(src_prop) for src_prop in source)
     return (ra, catalog_out, use_max)
 
 
+def _worker_task(args):
+    """Module-level worker function for multiprocessing (must be at module level to be picklable)."""
+    contour, image_data, fitsinfo, noise_out, source_fitting = args
+    return process_contour(contour, image_data, fitsinfo, noise_out, source_fitting)
+
+
 def multiprocess_contours(contours, image_data, fitsinfo, noise_out, ncpu=None, source_fitting="centroid"):
-
-    def contour_worker(input, output):
-        for func, args in iter(input.get, "STOP"):
-            result = func(*args)
-            output.put(result)
-
-    source_list = []
-    # Start worker processes
+    """Process contours in parallel with progress bar."""
+    # Determine number of CPUs
     if not ncpu:
         try:
             import multiprocessing
-
             ncpu = multiprocessing.cpu_count()
         except (RuntimeError, NotImplementedError):
-            pass
-    TASKS = []
-    for i in range(len(contours)):
-        contour = contours[i]
-        if len(contour) > 2:
-            x = []
-            y = []
-            for j in range(len(contour)):
-                x.append(contour[j][0])
-                y.append(contour[j][1])
-            TASKS.append((process_contour, (contour, image_data, fitsinfo, noise_out, source_fitting)))
-    task_queue = Queue()
-    done_queue = Queue()
-    # Submit tasks
-    for task in TASKS:
-        task_queue.put(task)
-    for i in range(ncpu):
-        Process(target=contour_worker, args=(task_queue, done_queue)).start()
+            ncpu = 1
 
-    num_max = 0
-    # Get the results from parallel processing
-    for i in range(len(TASKS)):
-        catalog_out = done_queue.get(timeout=1800)
-        if catalog_out[0] > -np.inf:
-            source_list.append(catalog_out)
-            num_max += catalog_out[2]
-    # Tell child processes to stop
-    for i in range(ncpu):
-        task_queue.put("STOP")
+    # Build task list
+    tasks = []
+    for contour in contours:
+        if len(contour) > 2:
+            tasks.append((contour, image_data, fitsinfo, noise_out, source_fitting))
+
+    # Process with progress bar
+    source_list = []
+    with Pool(processes=ncpu) as pool:
+        for catalog_out in tqdm(pool.imap_unordered(_worker_task, tasks), total=len(tasks), desc="Finding sources"):
+            if catalog_out[0] > -np.inf:
+                source_list.append(catalog_out)
 
     ra_sorted_list = sorted(source_list, key=itemgetter(0))
-
     return ra_sorted_list

@@ -437,14 +437,14 @@ def main(
         catalog_out = f"# cutt-off flux  (mJy/beam): {round(limiting_flux * 1000, 2)} \n"
         f.write(catalog_out)
         LOGGER.info(
-            f"Submitting distributed tasks for cataloguing (method: {source_fitting}). This might take a while..."
+            f"Submitting distributed tasks for cataloguing (method: {source_fitting})."
         )
         source_list = multiprocess_contours(contours, image_data, fitsinfo, noise, ncpu, source_fitting)
         catalog_out = f"# freq0 (Hz): {fitsinfo['freq0']} \n"
         f.write(catalog_out)
         catalog_out = f"# number of sources detected: {len(source_list)} \n"
         f.write(catalog_out)
-        catalog_out = "#\n#format: name ra_d dec_d i i_err emaj_s emin_s pa_d\n"
+        catalog_out = "#\n#format: name ra_d dec_d i i_err i_peak i_peak_error emaj_s emin_s pa_d\n"
         f.write(catalog_out)
         for i in range(len(source_list)):
             output = "src" + str(i) + " " + source_list[i][1] + "\n"

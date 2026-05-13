@@ -11,45 +11,50 @@ Breizorro is a flexible software program made to simplify image analysis tasks, 
 Usage: breizorro [OPTIONS]
 
 Options:
-  --restored-image PATH           Restored image file from which to build the
+  -r, --restored-image IMAGE      Restored image file from which to build the
                                   mask
-  --mask-image PATH               Input mask file(s). Either restored-image or
+  -m, --mask-image MASK           Input mask file(s). Either restored-image or
                                   mask-image must be specified.
-  --threshold FLOAT               Sigma threshold for masking (default = 6.5)
-  --boxsize INTEGER               Box size over which to compute stats
+  -t, --threshold float           Sigma threshold for masking (default = 6.5)
+  -b, --boxsize int               Box size over which to compute stats
                                   (default = 50)
   --savenoise / --no-savenoise    Export noise image as FITS file
-  --merge TEXT                    Merge one or more masks or region files
-  --subtract TEXT                 Subtract one or more masks or region files
-  -rc, --radial-cutoff FLOAT      Zero out mask beyond this radius in pixels
-                                  from centre (imitates beam attenuation)
+  --merge MASK(s)|REG(s)          Merge one or more masks or region files
+  --subtract MASK(s)|REG(s)       Subtract one or more masks or region files
+  -rc, --radial-cutoff RADIUS     Zero out mask beyond this radius in pixels
+                                  from center (imitates beam attenuation)
   --number-islands / --no-number-islands
                                   Number the islands detected
-  --remove-islands TEXT           Remove islands from input mask (list by
-                                  number or coordinates)
+  --remove-islands N|COORD        Remove islands from input mask (list by
+                                  number or coordinates) e.g. --remove-islands
+                                  1,18,20,20h10m13s:14d15m20s
   --ignore-missing-islands / --no-ignore-missing-islands
                                   Do not throw an error if an island specified
                                   by coordinates does not exist
-  --extract-islands TEXT          Extract islands from input mask (list by
-                                  number or coordinates)
-  --minimum-size INTEGER          Remove islands with areas fewer than or
+  --extract-islands N|COORD       Extract islands from input mask (list by
+                                  number or coordinates) e.g. --extract-
+                                  islands 1,18,20,20h10m13s:14d15m20s
+  --minimum-size int              Remove islands with areas fewer than or
                                   equal to the specified number of pixels
   --make-binary / --no-make-binary
                                   Replace all island numbers with 1
   --invert / --no-invert          Invert the mask
-  --dilate INTEGER                Apply dilation with a radius of R pixels
-  --erode INTEGER                 Apply N iterations of erosion
+  --dilate R                      Apply dilation with a radius of R pixels
+  --erode N                       Apply N iterations of erosion
   --fill-holes / --no-fill-holes  Fill holes (closed regions) in the mask
-  --sum-peak FLOAT                Sum-to-peak ratio of flux islands to mask in
+  --sum-peak float                Sum-to-peak ratio of flux islands to mask in
                                   original image
-  --ncpu INTEGER                  Number of processors to use for cataloguing
-  --beam-size FLOAT               Average beam size in arcsec if missing in
+  -j, --ncpu int                  Number of processors to use for cataloguing
+  --beam-size float               Average beam size in arcsec if missing in
                                   the image header
+  -sf, --source-fitting str       Source fitting method for catalogue
+                                  generation
   --gui / --no-gui                Open mask in bokeh html gui
-  --outfile PATH                  Suffix for the mask image (default based on
+  -o, --outfile File              The output mask image (default based on
                                   input name)
-  --outcatalog PATH               Generate a catalogue based on the region mask
-  --outregion PATH                Generate polygon regions from the mask
+  --outcatalog File               Generate a catalogue based on the region
+                                  mask
+  --outregion File                Generate polygon regions from the mask
   --help                          Show this message and exit.
 ```
 
@@ -114,31 +119,45 @@ This is particularly useful for analysing fields dominated by point sources.
 By efficiently parameterising and cataloguing compact sources, Breizorro enables rapid cross-matching.
 
 ```
-breizorro -r deep2-MFS-image.fits --outcatalog deep2.txt
+breizorro -r circinus-MFS-image.fits --outcatalog deep2.txt
 ```
 
 ```
-# processing fits image: deep2-MFS-image.fits
-# mean beam size (arcsec): 6.31 
-# original image peak flux (Jy/beam): 0.023107271641492844 
-# noise out (µJy/beam): 51.62 
-# cutt-off flux  (mJy/beam): 0.52 
-# freq0 (Hz): 1049833007.8125 
-# number of sources detected: 100 
+# processing fits image: circinus-MFS-image.fits
+# mean beam size (arcsec): 37.97
+# original image peak flux (Jy/beam): 0.7683289647102356
+# noise out (µJy/beam): 736.96
+# cutt-off flux  (mJy/beam): 4.79
+# freq0 (Hz): 1419944335.9375
+# number of sources detected: 35
 #
-#format: name ra_d dec_d i i_err emaj_s emin_s pa_d
-src0 60.64975237181635 -79.86348735299585 0.00369 0.0001 11.66 0.0 120.96
-src1 60.67140679629887 -80.36126947232378 7e-05 0.0001 0.0 0.0 0.0
-src2 60.877334392876136 -79.76691180042988 0.00113 0.0001 8.25 0.0 104.04
-src3 60.894387589282964 -79.73476060235502 0.00023 0.0001 0.0 0.0 0.0
-src4 60.95196895741357 -79.68021884337942 0.00054 0.0001 0.0 0.0 0.0
-src5 61.00657438220518 -80.17745581694626 0.00018 0.0001 0.0 0.0 0.0
-src6 61.04136845645677 -80.48097816446368 0.00032 0.0001 0.0 0.0 0.0
-src7 61.061502553348895 -79.93907167920088 0.01435 0.0001 21.54 0.0 111.8
-src8 61.18650068905602 -80.40952881341589 0.00027 0.0001 0.0 0.0 0.0
-src9 61.32594143681846 -79.91488530476678 7e-05 0.0001 0.0 0.0 0.0
-src10 61.47462421089555 -79.96912396162651 9e-05 0.0001 0.0 0.0 0.0
-src11 61.56419377531346 -80.18249455745902 0.0022 0.0001 10.77 0.0 158.2
+#format: name ra_d dec_d i i_err i_peak i_peak_error emaj_s emin_s pa_d
+src0 212.1114852668253 -65.52022230002818 0.01645 0.0017 0.01645 0.0017 0.0 0.0 0.0
+src1 212.15838150612473 -65.44043978204705 0.00513 0.00055 0.00513 0.00055 0.0 0.0 0.0
+src2 212.20192908332638 -65.39404261881141 0.00537 0.00059 0.00537 0.00059 0.0 0.0 0.0
+src3 212.25942030914388 -65.08587770640244 0.00894 0.00112 0.00894 0.00112 0.0 0.0 0.0
+src4 212.34142138447163 -65.28756781209889 0.06875 0.00699 0.06875 0.00699 0.0 0.0 0.0
+src5 212.4017279869488 -65.28100679894399 0.00814 0.00102 0.00814 0.00102 0.0 0.0 0.0
+src6 212.48217912947138 -65.72299674107823 0.05203 0.00531 0.05203 0.00531 0.0 0.0 0.0
+src7 212.50820130212415 -64.88584945077669 0.00536 0.0006 0.00536 0.0006 0.0 0.0 0.0
+src8 212.5702902342093 -65.65050370039532 0.00546 0.00059 0.00546 0.00059 0.0 0.0 0.0
+src9 212.57060833616958 -65.44161961395122 0.0081 0.00085 0.0081 0.00085 0.0 0.0 0.0
+src10 212.71633807796545 -65.42932839276426 0.00483 0.00049 0.00483 0.00049 0.0 0.0 0.0
+src11 212.77548695536805 -65.2127221382807 0.00502 0.00053 0.00502 0.00053 0.0 0.0 0.0
+src12 212.94697030800972 -65.46771419775158 0.0059 0.00063 0.0059 0.00063 0.0 0.0 0.0
+src13 213.02987212660275 -65.82402586988974 0.0058 0.00066 0.0058 0.00066 0.0 0.0 0.0
+src14 213.09132783845993 -65.83601937078244 0.00893 0.00094 0.00893 0.00094 0.0 0.0 0.0
+src15 213.09865015952178 -64.84001483960485 0.00919 0.00099 0.00919 0.00099 0.0 0.0 0.0
+src16 213.11251590492353 -65.02758772062043 0.00651 0.00085 0.00651 0.00085 0.0 0.0 0.0
+src17 213.23985204575342 -65.03719936384542 0.00538 0.0006 0.00538 0.0006 0.0 0.0 0.0
+src18 213.2413293070179 -65.01106379809042 0.00533 0.00063 0.00533 0.00063 0.0 0.0 0.0
+src19 213.2899899919003 -65.34038197853626 1.56983 0.15704 0.76833 0.07696 238.62 74.32 -41.88
+src20 213.30053772896596 -65.55087714062736 0.00831 0.001 0.00831 0.001 0.0 0.0 0.0
+src21 213.30590547065324 -65.23402090775575 0.00511 0.00056 0.00511 0.00056 0.0 0.0 0.0
+src22 213.3703871930737 -65.02801216160296 0.00534 0.00062 0.00534 0.00062 0.0 0.0 0.0
+src23 213.40473320520746 -65.7032754189847 0.02391 0.00261 0.02255 0.00249 40.22 27.75 135.34
+src24 213.48631194937263 -65.78499670808618 0.00506 0.00051 0.00506 0.00051 0.0 0.0 0.0
+src25 213.5033368507256 -65.0479188751319 0.04865 0.00499 0.04865 0.00499 0.0 0.0 0.0
 ```
 
 

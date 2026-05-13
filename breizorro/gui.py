@@ -29,7 +29,7 @@ def display(imagename, mask_image, outcatalog, source_list):
     source_list : list of tuples
         A list containing information about detected sources, where each entry is a tuple
         with the following format:
-        (RA, 'RA DEC I I_err Emaj_s Emin_s PA_d', flag).
+        (RA, 'RA DEC I I_err I_peak I_peak_error Emaj_s Emin_s PA_d', flag).
 
         - RA : float
             Right Ascension in degrees.
@@ -38,7 +38,11 @@ def display(imagename, mask_image, outcatalog, source_list):
         - I : float
             Intensity or flux measurement.
         - I_err : float
-            Error in the intensity measurement.
+            Error in the integrated intensity measurement.
+        - I_peak : float
+            Peak intensity.
+        - I_peak_error : float
+            Error in the peak intensity measurement.
         - Emaj_s : float
             Major axis error (in arcseconds).
         - Emin_s : float
@@ -68,7 +72,7 @@ def display(imagename, mask_image, outcatalog, source_list):
         ]
 
         # Assuming `source_list` is already populated with your data
-        # Example source_list: [(ra, 'ra dec i i_err emaj_s emin_s pa_d', flag)]
+        # Example source_list: [(ra, 'ra dec i i_err i_peak i_peak_error emaj_s emin_s pa_d', flag)]
         # Parse the source_list and split each string into its components
         data = {
             "name": [f"src{i}" for i in range(len(source_list))],
@@ -76,9 +80,11 @@ def display(imagename, mask_image, outcatalog, source_list):
             "dec_deg": [float(d[1].split(" ")[1]) for d in source_list],
             "i": [float(d[1].split(" ")[2]) for d in source_list],
             "error": [float(d[1].split(" ")[3]) for d in source_list],
-            "emaj_s": [float(d[1].split(" ")[4]) for d in source_list],
-            "emin_s": [float(d[1].split(" ")[5]) for d in source_list],
-            "pa_d": [float(d[1].split(" ")[6]) for d in source_list],
+            "i_peak": [float(d[1].split(" ")[4]) for d in source_list],
+            "i_peak_error": [float(d[1].split(" ")[5]) for d in source_list],
+            "emaj_s": [float(d[1].split(" ")[6]) for d in source_list],
+            "emin_s": [float(d[1].split(" ")[7]) for d in source_list],
+            "pa_d": [float(d[1].split(" ")[8]) for d in source_list],
         }
 
         # Format RA and DEC to hh:mm:ss and dd:mm:ss
@@ -104,6 +110,8 @@ def display(imagename, mask_image, outcatalog, source_list):
             TableColumn(field="dec_deg", title="dec (deg)", formatter=decimal_formatter),
             TableColumn(field="i", title="i (Jy)", formatter=scientific_formatter),
             TableColumn(field="error", title="i_err (Jy)", formatter=scientific_formatter),
+            TableColumn(field="i_peak", title="i_peak (Jy)", formatter=scientific_formatter),
+            TableColumn(field="i_peak_error", title="i_peak_error (Jy)", formatter=scientific_formatter),
             TableColumn(field="emaj_s", title="emaj_s (arcsec)"),
             TableColumn(field="emin_s", title="emin_s (arcsec)"),
             TableColumn(field="pa_d", title="pa_d (deg)"),
@@ -149,6 +157,7 @@ def display(imagename, mask_image, outcatalog, source_list):
             ("RA", "@RA"),
             ("DEC", "@DEC"),
             ("Flux", "@i"),
+            ("Peak", "@i_peak"),
         ]
         hover.renderers = [scatter_renderer]
         p.add_tools(hover)

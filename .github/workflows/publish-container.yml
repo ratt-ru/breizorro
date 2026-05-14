@@ -54,5 +54,5 @@ jobs:
           context: .
           # Only push if it's NOT a pull_request
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ id.meta.outputs.tags }}
-          labels: ${{ id.meta.outputs.labels }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

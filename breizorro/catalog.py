@@ -161,8 +161,17 @@ def process_contour(contour, image_data, fitsinfo, noise_out, source_fitting="ce
 
 def _worker_task(args):
     """Module-level worker function for multiprocessing (must be at module level to be picklable)."""
-    contour, image_data, fitsinfo, noise_out, source_fitting = args
-    return process_contour(contour, image_data, fitsinfo, noise_out, source_fitting)
+    # legacy signature kept for compatibility but prefer new single-arg use
+    return process_contour(args, _shared_image_data, _shared_fitsinfo, _shared_noise_out, _shared_source_fitting)
+
+
+def init_worker(image_data, fitsinfo, noise_out, source_fitting):
+    """Initializer for worker processes to set large shared objects once per process."""
+    global _shared_image_data, _shared_fitsinfo, _shared_noise_out, _shared_source_fitting
+    _shared_image_data = image_data
+    _shared_fitsinfo = fitsinfo
+    _shared_noise_out = noise_out
+    _shared_source_fitting = source_fitting
 
 
 def multiprocess_contours(contours, image_data, fitsinfo, noise_out, ncpu=None, source_fitting="centroid"):
@@ -176,15 +185,12 @@ def multiprocess_contours(contours, image_data, fitsinfo, noise_out, ncpu=None, 
         except (RuntimeError, NotImplementedError):
             ncpu = 1
 
-    # Build task list
-    tasks = []
-    for contour in contours:
-        if len(contour) > 2:
-            tasks.append((contour, image_data, fitsinfo, noise_out, source_fitting))
+    # Build task list (only send contour objects; big arrays go to worker initializer)
+    tasks = [contour for contour in contours if len(contour) > 2]
 
-    # Process with progress bar
+    # Process with progress bar. Use initializer to set shared large objects once per worker.
     source_list = []
-    with Pool(processes=ncpu) as pool:
+    with Pool(processes=ncpu, initializer=init_worker, initargs=(image_data, fitsinfo, noise_out, source_fitting)) as pool:
         for catalog_out in tqdm(pool.imap_unordered(_worker_task, tasks), total=len(tasks), desc="Finding sources"):
             if catalog_out[0] > -np.inf:
                 source_list.append(catalog_out)

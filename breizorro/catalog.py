@@ -171,6 +171,7 @@ def multiprocess_contours(contours, image_data, fitsinfo, noise_out, ncpu=None, 
     if not ncpu:
         try:
             import multiprocessing
+
             ncpu = multiprocessing.cpu_count()
         except (RuntimeError, NotImplementedError):
             ncpu = 1

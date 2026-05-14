@@ -436,9 +436,7 @@ def main(
         limiting_flux = noise * threshold
         catalog_out = f"# cutt-off flux  (mJy/beam): {round(limiting_flux * 1000, 2)} \n"
         f.write(catalog_out)
-        LOGGER.info(
-            f"Submitting distributed tasks for cataloguing (method: {source_fitting})."
-        )
+        LOGGER.info(f"Submitting distributed tasks for cataloguing (method: {source_fitting}).")
         source_list = multiprocess_contours(contours, image_data, fitsinfo, noise, ncpu, source_fitting)
         catalog_out = f"# freq0 (Hz): {fitsinfo['freq0']} \n"
         f.write(catalog_out)

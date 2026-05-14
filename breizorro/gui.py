@@ -141,9 +141,9 @@ def display(imagename, mask_image, outcatalog, source_list):
         )
         # Add labels to the scatter points (optional, can hide later as needed)
         labels = LabelSet(
-            x="RA",
-            y="DEC",
-            text="Name",
+            x="ra_deg",
+            y="dec_deg",
+            text="name",
             source=table_source,
             text_font_size="10pt",
             text_baseline="middle",

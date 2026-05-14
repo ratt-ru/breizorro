@@ -190,7 +190,9 @@ def multiprocess_contours(contours, image_data, fitsinfo, noise_out, ncpu=None, 
 
     # Process with progress bar. Use initializer to set shared large objects once per worker.
     source_list = []
-    with Pool(processes=ncpu, initializer=init_worker, initargs=(image_data, fitsinfo, noise_out, source_fitting)) as pool:
+    with Pool(
+        processes=ncpu, initializer=init_worker, initargs=(image_data, fitsinfo, noise_out, source_fitting)
+    ) as pool:
         for catalog_out in tqdm(pool.imap_unordered(_worker_task, tasks), total=len(tasks), desc="Finding sources"):
             if catalog_out[0] > -np.inf:
                 source_list.append(catalog_out)

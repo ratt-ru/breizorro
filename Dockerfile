@@ -14,8 +14,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     && rm -rf /var/lib/apt/lists/*
 # Install package with all dependencies using the locked uv environment
-# Install with [all] extras to include catalog and gui functionality
-RUN uv sync --frozen --system --extra all
+# Run a locked sync, then install optional extras via pip from the local project.
+RUN uv sync --frozen \
+    && python -m pip install --no-cache-dir '.[all]'
 
 # Make CLI available
 CMD ["breizorro", "--help"]

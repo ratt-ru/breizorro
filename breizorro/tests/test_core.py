@@ -5,6 +5,7 @@ import pytest
 from astropy.io import fits
 from astropy.wcs import WCS
 
+from breizorro.breizorro import reproject_mask_to_reference
 from breizorro.utils import apply_radial_cutoff, match_mask_shape
 
 
@@ -353,6 +354,51 @@ class TestWCSOperations:
 
         assert len(wcs.array_shape) == 2, "Should have 2D WCS!"
         assert wcs.array_shape == (100, 100), "Shape should be preserved!"
+
+
+class TestReprojectMaskToReference:
+    """Test cases for the extracted reprojection helper"""
+
+    def _build_header(self, size, crpix):
+        header = fits.Header()
+        header["NAXIS"] = 2
+        header["NAXIS1"] = size[1]
+        header["NAXIS2"] = size[0]
+        header["CRPIX1"] = crpix[1]
+        header["CRPIX2"] = crpix[0]
+        header["CRVAL1"] = 0.0
+        header["CRVAL2"] = 0.0
+        header["CDELT1"] = 1.0
+        header["CDELT2"] = 1.0
+        header["CTYPE1"] = "RA---TAN"
+        header["CTYPE2"] = "DEC--TAN"
+        return header
+
+    def test_returns_input_when_shape_and_wcs_match(self):
+        mask = np.zeros((10, 10), dtype=float)
+        mask[4, 4] = 1.0
+        header = self._build_header((10, 10), (5, 5))
+        wcs_ref = WCS(header)
+
+        result = reproject_mask_to_reference(mask, header, mask, wcs_ref)
+
+        assert result.shape == mask.shape
+        assert np.array_equal(result, mask)
+
+    def test_reprojects_to_reference_shape(self):
+        source = np.zeros((5, 5), dtype=float)
+        source[2, 2] = 1.0
+        source_header = self._build_header((5, 5), (3, 3))
+
+        reference = np.zeros((11, 11), dtype=float)
+        reference_header = self._build_header((11, 11), (6, 6))
+        reference_wcs = WCS(reference_header)
+
+        result = reproject_mask_to_reference(source, source_header, reference, reference_wcs)
+
+        assert result.shape == reference.shape
+        assert np.count_nonzero(result) >= 1
+        assert result.sum() == pytest.approx(1.0)
 
 
 if __name__ == "__main__":

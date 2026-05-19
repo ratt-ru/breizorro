@@ -99,6 +99,44 @@ def remove_regions(mask_image, regs, wcs):
         mask_image[reg.to_mask().to_image(mask_image.shape) != 0] = 0
 
 
+def reproject_mask_to_reference(mask_data, mask_header, reference_image, reference_wcs):
+    """Reproject a mask to the reference image WCS and shape."""
+    shapes_match = mask_data.shape == reference_image.shape
+
+    try:
+        mask_wcs = WCS(mask_header)
+        while len(mask_wcs.array_shape) > 2:
+            mask_wcs = mask_wcs.dropaxis(len(mask_wcs.array_shape) - 1)
+
+        pixscale_match = np.allclose(reference_wcs.pixel_scale_matrix, mask_wcs.pixel_scale_matrix, rtol=1e-6)
+        crpix_match = np.allclose(reference_wcs.wcs.crpix, mask_wcs.wcs.crpix, rtol=1e-6)
+        crval_match = np.allclose(reference_wcs.wcs.crval, mask_wcs.wcs.crval, rtol=1e-9)
+        ctype_match = (reference_wcs.wcs.ctype == mask_wcs.wcs.ctype).all()
+
+        if shapes_match and pixscale_match and crpix_match and crval_match and ctype_match:
+            LOGGER.info("Mask shape and WCS match reference, skipping reprojection")
+            return mask_data
+
+        if shapes_match:
+            LOGGER.info("Mask shape matches but WCS differs, reprojecting...")
+        else:
+            LOGGER.info(f"Reprojecting mask from shape {mask_data.shape} to {reference_image.shape}")
+
+        reprojected, _ = reproject_interp(
+            (mask_data, mask_wcs),
+            reference_wcs,
+            shape_out=reference_image.shape,
+            order="nearest-neighbor",
+        )
+        return np.nan_to_num(reprojected, nan=0.0)
+    except Exception as exc:
+        LOGGER.warning(
+            "Failed to reproject mask to reference WCS (%s). Falling back to shape match.",
+            exc,
+        )
+        return match_mask_shape(mask_data, reference_image.shape)
+
+
 def main(
     restored_image,
     mask_image,
@@ -199,66 +237,6 @@ def main(
                 raise ValueError(msg) from exc
         return fits, regs
 
-    def reproject_mask_to_reference(mask_data, mask_header):
-        # First check: shapes must match
-        shapes_match = mask_data.shape == mask_image.shape
-
-        # Second check: WCS must be compatible
-        wcs_match = False
-        try:
-            mask_wcs = WCS(mask_header)
-            while len(mask_wcs.array_shape) > 2:
-                mask_wcs = mask_wcs.dropaxis(len(mask_wcs.array_shape) - 1)
-
-            # Check if WCS are effectively the same by comparing key properties
-            # 1. Check pixel scales (cdelt or cd matrix)
-            ref_pixscale = wcs.pixel_scale_matrix
-            mask_pixscale = mask_wcs.pixel_scale_matrix
-            pixscale_match = np.allclose(ref_pixscale, mask_pixscale, rtol=1e-6)
-
-            # 2. Check reference pixels (crpix)
-            crpix_match = np.allclose(wcs.wcs.crpix, mask_wcs.wcs.crpix, rtol=1e-6)
-
-            # 3. Check reference values (crval) - sky coordinates
-            crval_match = np.allclose(wcs.wcs.crval, mask_wcs.wcs.crval, rtol=1e-9)
-
-            # 4. Check projection type (ctype)
-            ctype_match = (wcs.wcs.ctype == mask_wcs.wcs.ctype).all()
-
-            wcs_match = pixscale_match and crpix_match and crval_match and ctype_match
-
-            if wcs_match and shapes_match:
-                LOGGER.info("Mask shape and WCS match reference, skipping reprojection")
-                return mask_data
-            elif shapes_match and not wcs_match:
-                LOGGER.info("Mask shape matches but WCS differs, reprojecting...")
-            else:
-                LOGGER.info(f"Reprojecting mask from shape {mask_data.shape} to {mask_image.shape}")
-
-        except Exception as wcs_check_exc:
-            LOGGER.debug(f"WCS comparison failed: {wcs_check_exc}, proceeding with reprojection check")
-
-        # Need to reproject
-        try:
-            if "mask_wcs" not in locals():
-                mask_wcs = WCS(mask_header)
-                while len(mask_wcs.array_shape) > 2:
-                    mask_wcs = mask_wcs.dropaxis(len(mask_wcs.array_shape) - 1)
-
-            reprojected, _ = reproject_interp(
-                (mask_data, mask_wcs),
-                wcs,
-                shape_out=mask_image.shape,
-                order="nearest-neighbor",
-            )
-            return np.nan_to_num(reprojected, nan=0.0)
-        except Exception as exc:
-            LOGGER.warning(
-                "Failed to reproject mask to reference WCS (%s). Falling back to shape match.",
-                exc,
-            )
-            return match_mask_shape(mask_data, mask_image.shape)
-
     if isinstance(merge, list):
         for _merge in merge:
             fits, regs = load_fits_or_region(_merge)
@@ -266,7 +244,7 @@ def main(
                 LOGGER.info(f"Treating {_merge} as a FITS mask")
                 merge_mask, merge_header = fits
                 # Reproject to reference WCS before merging
-                merge_mask = reproject_mask_to_reference(merge_mask, merge_header)
+                merge_mask = reproject_mask_to_reference(merge_mask, merge_header, mask_image, wcs)
                 mask_image += merge_mask
                 LOGGER.info("Merged into mask")
             else:
@@ -282,7 +260,7 @@ def main(
                 LOGGER.info(f"treating {_subtract} as a FITS mask")
                 subtract_mask, subtract_header = fits
                 # Reproject to reference WCS before subtracting
-                subtract_mask = reproject_mask_to_reference(subtract_mask, subtract_header)
+                subtract_mask = reproject_mask_to_reference(subtract_mask, subtract_header, mask_image, wcs)
                 mask_image[subtract_mask != 0] = 0
                 LOGGER.info("Subtracted from mask")
             else:

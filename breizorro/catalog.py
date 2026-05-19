@@ -171,24 +171,20 @@ def process_contour(contour, image_data, fitsinfo, noise_out, source_fitting="ce
         # Ensure RA is positive
         if ra < 0:
             ra += 360
-        source_flux = (round(total_flux, 5), round(flux_density_error, 5))
-        source_peak = (round(peak_flux, 5), round(peak_error, 5))
         source_size = get_source_size(contour, pix_size, mean_beam, image_data, total_peak_ratio, _centroids)
-
         # For unresolved (point) sources, total_flux should equal peak_flux
         if source_size[0] == 0.0 and source_size[1] == 0.0:
             total_flux = peak_flux
             flux_density_error = peak_error
-            source_flux = (round(total_flux, 5), round(flux_density_error, 5))
         ra_error, dec_error = estimate_position_uncertainty(peak_flux, noise_out, mean_beam, dec, source_size)
         source = (
-            f"{ra:.8f}",
-            f"{dec:.8f}",
+            f"{ra:.4f}",
+            f"{dec:.4f}",
             format_scientific(ra_error),
             format_scientific(dec_error),
-            f"{total_flux:.5f}",
+            f"{total_flux:.2f}",
             format_scientific(flux_density_error),
-            f"{peak_flux:.5f}",
+            f"{peak_flux:.2f}",
             format_scientific(peak_error),
         ) + source_size
         catalog_out = " ".join(str(src_prop) for src_prop in source)

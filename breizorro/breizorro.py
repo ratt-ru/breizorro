@@ -375,6 +375,7 @@ def main(
     if outcatalog and restored_image:
         try:
             import warnings
+
             with warnings.catch_warnings():
                 warnings.resetwarnings()
                 warnings.filterwarnings("ignore", category=UserWarning, append=True)

@@ -90,6 +90,33 @@ def get_centroid_method(method_name="centroid"):
     return method
 
 
+def estimate_position_uncertainty(peak_flux, noise_out, mean_beam, dec_deg, source_size=None):
+    """Estimate RA/DEC position errors from beam size and peak SNR.
+
+    The uncertainty is estimated as FWHM / (2 * SNR), with the RA error
+    corrected for declination. For resolved sources we use the larger of the
+    fitted source size and the restoring beam as a conservative width.
+    """
+    safe_noise = max(abs(noise_out), np.finfo(float).tiny)
+    snr = max(abs(peak_flux) / safe_noise, 1.0)
+
+    if source_size and len(source_size) >= 2 and (source_size[0] > 0.0 or source_size[1] > 0.0):
+        major_fwhm = max(float(source_size[0]), float(mean_beam))
+        minor_fwhm = max(float(source_size[1]), float(mean_beam))
+    else:
+        major_fwhm = float(mean_beam)
+        minor_fwhm = float(mean_beam)
+
+    cos_dec = max(np.cos(np.deg2rad(dec_deg)), np.finfo(float).eps)
+    ra_err_deg = (major_fwhm / (2.0 * snr)) / 3600.0 / cos_dec
+    dec_err_deg = (minor_fwhm / (2.0 * snr)) / 3600.0
+    return ra_err_deg, dec_err_deg
+
+
+def format_scientific(value):
+    return f"{value:.2e}"
+
+
 def process_contour(contour, image_data, fitsinfo, noise_out, source_fitting="centroid"):
     use_max = 0
     ra = -np.inf
@@ -153,8 +180,17 @@ def process_contour(contour, image_data, fitsinfo, noise_out, source_fitting="ce
             total_flux = peak_flux
             flux_density_error = peak_error
             source_flux = (round(total_flux, 5), round(flux_density_error, 5))
-        # source_pos = format_source_coordinates(ra, dec)
-        source = (ra, dec) + source_flux + source_peak + source_size
+        ra_error, dec_error = estimate_position_uncertainty(peak_flux, noise_out, mean_beam, dec, source_size)
+        source = (
+            f"{ra:.8f}",
+            f"{dec:.8f}",
+            format_scientific(ra_error),
+            format_scientific(dec_error),
+            f"{total_flux:.5f}",
+            format_scientific(flux_density_error),
+            f"{peak_flux:.5f}",
+            format_scientific(peak_error),
+        ) + source_size
         catalog_out = " ".join(str(src_prop) for src_prop in source)
     return (ra, catalog_out, use_max)
 

@@ -375,15 +375,11 @@ def main(
     if outcatalog and restored_image:
         try:
             import warnings
-
-            # Suppress FittingWarnings from Astropy
-            # WARNING: The fit may be unsuccessful; check fit_info['message'] for more information. [astropy.modeling.fitting]
-            # Use context manager for handling warnings
             with warnings.catch_warnings():
                 warnings.resetwarnings()
                 warnings.filterwarnings("ignore", category=UserWarning, append=True)
-            from breizorro.catalog import multiprocess_contours
-        except ModuleNotFoundError as exc:
+                from breizorro.catalog import multiprocess_contours
+        except Exception as exc:
             msg = "Running breizorro source detector requires optional dependencies, please re-install with: pip install breizorro[all]"
             LOGGER.error(msg)
             raise ModuleNotFoundError(msg) from exc
@@ -420,7 +416,7 @@ def main(
         f.write(catalog_out)
         catalog_out = f"# number of sources detected: {len(source_list)} \n"
         f.write(catalog_out)
-        catalog_out = "#\n#format: name ra_d dec_d i i_err i_peak i_peak_error emaj_s emin_s pa_d\n"
+        catalog_out = "#\n#format: name ra_d dec_d ra_d_err dec_d_err i i_err i_peak i_peak_error emaj_s emin_s pa_d\n"
         f.write(catalog_out)
         for i in range(len(source_list)):
             output = "src" + str(i) + " " + source_list[i][1] + "\n"

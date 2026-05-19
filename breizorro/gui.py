@@ -29,12 +29,16 @@ def display(imagename, mask_image, outcatalog, source_list):
     source_list : list of tuples
         A list containing information about detected sources, where each entry is a tuple
         with the following format:
-        (RA, 'RA DEC I I_err I_peak I_peak_error Emaj_s Emin_s PA_d', flag).
+        (RA, 'RA DEC RA_err DEC_err I I_err I_peak I_peak_error Emaj_s Emin_s PA_d', flag).
 
         - RA : float
             Right Ascension in degrees.
         - DEC : float
             Declination in degrees.
+        - RA_err : float
+            Right Ascension uncertainty in degrees.
+        - DEC_err : float
+            Declination uncertainty in degrees.
         - I : float
             Intensity or flux measurement.
         - I_err : float
@@ -72,19 +76,21 @@ def display(imagename, mask_image, outcatalog, source_list):
         ]
 
         # Assuming `source_list` is already populated with your data
-        # Example source_list: [(ra, 'ra dec i i_err i_peak i_peak_error emaj_s emin_s pa_d', flag)]
+        # Example source_list: [(ra, 'ra dec ra_err dec_err i i_err i_peak i_peak_error emaj_s emin_s pa_d', flag)]
         # Parse the source_list and split each string into its components
         data = {
             "name": [f"src{i}" for i in range(len(source_list))],
             "ra_deg": [float(d[1].split(" ")[0]) for d in source_list],
             "dec_deg": [float(d[1].split(" ")[1]) for d in source_list],
-            "i": [float(d[1].split(" ")[2]) for d in source_list],
-            "error": [float(d[1].split(" ")[3]) for d in source_list],
-            "i_peak": [float(d[1].split(" ")[4]) for d in source_list],
-            "i_peak_error": [float(d[1].split(" ")[5]) for d in source_list],
-            "emaj_s": [float(d[1].split(" ")[6]) for d in source_list],
-            "emin_s": [float(d[1].split(" ")[7]) for d in source_list],
-            "pa_d": [float(d[1].split(" ")[8]) for d in source_list],
+            "ra_err": [float(d[1].split(" ")[2]) for d in source_list],
+            "dec_err": [float(d[1].split(" ")[3]) for d in source_list],
+            "i": [float(d[1].split(" ")[4]) for d in source_list],
+            "error": [float(d[1].split(" ")[5]) for d in source_list],
+            "i_peak": [float(d[1].split(" ")[6]) for d in source_list],
+            "i_peak_error": [float(d[1].split(" ")[7]) for d in source_list],
+            "emaj_s": [float(d[1].split(" ")[8]) for d in source_list],
+            "emin_s": [float(d[1].split(" ")[9]) for d in source_list],
+            "pa_d": [float(d[1].split(" ")[10]) for d in source_list],
         }
 
         # Format RA and DEC to hh:mm:ss and dd:mm:ss
@@ -108,6 +114,8 @@ def display(imagename, mask_image, outcatalog, source_list):
             TableColumn(field="name", title="name"),
             TableColumn(field="ra_deg", title="ra (deg)", formatter=decimal_formatter),
             TableColumn(field="dec_deg", title="dec (deg)", formatter=decimal_formatter),
+            TableColumn(field="ra_err", title="ra_err (deg)", formatter=scientific_formatter),
+            TableColumn(field="dec_err", title="dec_err (deg)", formatter=scientific_formatter),
             TableColumn(field="i", title="i (Jy)", formatter=scientific_formatter),
             TableColumn(field="error", title="i_err (Jy)", formatter=scientific_formatter),
             TableColumn(field="i_peak", title="i_peak (Jy)", formatter=scientific_formatter),

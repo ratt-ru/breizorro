@@ -6,6 +6,7 @@ from astropy.io import fits
 from astropy.wcs import WCS
 
 from breizorro.breizorro import reproject_mask_to_reference
+from breizorro.catalog import estimate_position_uncertainty, format_scientific
 from breizorro.utils import apply_radial_cutoff, match_mask_shape
 
 
@@ -160,6 +161,28 @@ class TestMaskOperations:
         assert mask1[25, 25] == 0, "Subtracted region should be 0!"
         # Edges should still be 1
         assert mask1[5, 5] == 1, "Non-subtracted region should be 1!"
+
+
+class TestPositionUncertainty:
+    """Test cases for catalog position error estimation."""
+
+    def test_position_uncertainty_uses_beam_and_snr(self):
+        ra_err, dec_err = estimate_position_uncertainty(
+            peak_flux=1.0,
+            noise_out=0.1,
+            mean_beam=10.0,
+            dec_deg=0.0,
+            source_size=(0.0, 0.0, 0.0),
+        )
+
+        expected = 10.0 / (2.0 * 10.0) / 3600.0
+        assert ra_err == pytest.approx(expected)
+        assert dec_err == pytest.approx(expected)
+
+    def test_position_uncertainty_formats_scientific_notation(self):
+        formatted = format_scientific(1.23e-6)
+        assert "e" in formatted
+        assert formatted == "1.23e-06"
 
 
 class TestIslandOperations:

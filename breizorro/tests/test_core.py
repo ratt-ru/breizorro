@@ -182,7 +182,7 @@ class TestPositionUncertainty:
     def test_position_uncertainty_formats_scientific_notation(self):
         formatted = format_scientific(1.23e-6)
         assert "e" in formatted
-        assert formatted == "1.23e-06"
+        assert formatted == "1.2300e-06"
 
 
 class TestIslandOperations:

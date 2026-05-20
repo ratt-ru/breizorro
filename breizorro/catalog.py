@@ -114,7 +114,7 @@ def estimate_position_uncertainty(peak_flux, noise_out, mean_beam, dec_deg, sour
 
 
 def format_scientific(value):
-    return f"{value:.2e}"
+    return f"{value:.4e}"
 
 
 def process_contour(contour, image_data, fitsinfo, noise_out, source_fitting="centroid"):
@@ -182,9 +182,9 @@ def process_contour(contour, image_data, fitsinfo, noise_out, source_fitting="ce
             f"{dec:.4f}",
             format_scientific(ra_error),
             format_scientific(dec_error),
-            f"{total_flux:.2f}",
+            format_scientific(total_flux),
             format_scientific(flux_density_error),
-            f"{peak_flux:.2f}",
+            format_scientific(peak_flux),
             format_scientific(peak_error),
         ) + source_size
         catalog_out = " ".join(str(src_prop) for src_prop in source)

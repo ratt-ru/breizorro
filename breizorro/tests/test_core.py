@@ -4,8 +4,9 @@ import numpy as np
 import pytest
 from astropy.io import fits
 from astropy.wcs import WCS
+from regions import PixCoord, RectanglePixelRegion
 
-from breizorro.breizorro import reproject_mask_to_reference
+from breizorro.breizorro import add_regions, remove_regions, reproject_mask_to_reference
 from breizorro.catalog import estimate_position_uncertainty, format_scientific
 from breizorro.utils import apply_radial_cutoff, match_mask_shape
 
@@ -134,28 +135,41 @@ class TestMaskOperations:
     """Test cases for mask merging and subtraction"""
 
     def test_mask_addition(self):
-        """Test basic mask addition"""
-        mask1 = np.zeros((50, 50))
-        mask1[10:20, 10:20] = 1
+        """Test region-based addition and final binarization"""
+        result = np.zeros((50, 50), dtype=float)
 
-        mask2 = np.zeros((50, 50))
-        mask2[15:25, 15:25] = 1
+        region1 = RectanglePixelRegion(center=PixCoord(15, 15), width=10, height=10)
+        region2 = RectanglePixelRegion(center=PixCoord(20, 20), width=10, height=10)
 
-        result = mask1 + mask2
-        # Overlapping region should have value 2
-        assert result[16, 16] == 2, "Overlapping region should sum!"
-        # Non-overlapping should be 1
-        assert result[11, 11] == 1, "Non-overlapping should be 1!"
-        assert result[21, 21] == 1, "Non-overlapping should be 1!"
+        # 1. Accumulate the regions
+        add_regions(result, [region1], None)
+        add_regions(result, [region2], None)
+
+        # Optional intermediate-state check: overlap is accumulated before flattening.
+        assert result[16, 16] == 2, "Raw intermediate overlapping region should sum to 2!"
+
+        # 2. Apply the final flattening step used in the pipeline.
+        result = result != 0
+
+        # 3. Validate final binary output.
+        assert result[16, 16] == 1, "Final overlapping region should be flattened to 1 (True)!"
+        assert result[11, 11] == 1, "Non-overlapping should be 1 (True)!"
+        assert result[21, 21] == 1, "Non-overlapping should be 1 (True)!"
+        assert result[0, 0] == 0, "Unmasked areas should remain 0 (False)!"
 
     def test_mask_subtraction(self):
-        """Test mask subtraction"""
-        mask1 = np.ones((50, 50))
-        mask2 = np.zeros((50, 50))
-        mask2[10:40, 10:40] = 1
+        """Test subtraction with breizorro.remove_regions and utils.match_mask_shape"""
+        mask1 = np.ones((50, 50), dtype=float)
 
-        # Subtract mask2 from mask1
-        mask1[mask2 != 0] = 0
+        # Use match_mask_shape to align a smaller subtraction mask to target shape.
+        small_subtract_mask = np.zeros((30, 30), dtype=float)
+        small_subtract_mask[10:20, 10:20] = 1
+        aligned_subtract_mask = match_mask_shape(small_subtract_mask, mask1.shape)
+        mask1[aligned_subtract_mask != 0] = 0
+
+        # Remove an additional region using breizorro's subtraction helper.
+        remove_region = RectanglePixelRegion(center=PixCoord(25, 25), width=20, height=20)
+        remove_regions(mask1, [remove_region], None)
 
         # Center should be zeroed
         assert mask1[25, 25] == 0, "Subtracted region should be 0!"

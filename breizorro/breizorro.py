@@ -89,10 +89,15 @@ def add_regions(mask_image, regs, wcs):
     for reg in regs:
         if hasattr(reg, "to_pixel"):
             reg = reg.to_pixel(wcs)
-        img_mask = reg.to_mask().to_image(mask_image.shape)
-        # check regions outside the boundaries
-        if img_mask is not None:
-            mask_image += img_mask
+        region_mask = reg.to_mask()
+        if region_mask is not None:
+            # Get ONLY the 2D shape (Y, X) of the image, ignoring Stokes/Freq axes
+            shape_2d = mask_image.shape[-2:]
+            slices = region_mask.bbox.get_overlap_slices(shape_2d)
+            if slices is not None:
+                large_slices, small_slices = slices
+                # Use ... to automatically handle the 1-sized extra dimensions
+                mask_image[..., large_slices[0], large_slices[1]] += region_mask.data[small_slices]
 
 
 def remove_regions(mask_image, regs, wcs):

@@ -89,7 +89,10 @@ def add_regions(mask_image, regs, wcs):
     for reg in regs:
         if hasattr(reg, "to_pixel"):
             reg = reg.to_pixel(wcs)
-        mask_image += reg.to_mask().to_image(mask_image.shape)
+        img_mask = reg.to_mask().to_image(mask_image.shape)
+        # check regions outside the boundaries
+        if img_mask is not None:
+            mask_image += img_mask
 
 
 def remove_regions(mask_image, regs, wcs):
@@ -323,6 +326,12 @@ def main(
         LOGGER.info("Filling closed regions")
         mask_image = binary_fill_holes(mask_image)
 
+    # Apply radial cutoff if specified
+    if radial_cutoff:
+        LOGGER.info(f"Applying radial cutoff: {radial_cutoff} pixels from center")
+        mask_image = apply_radial_cutoff(mask_image, radial_cutoff)
+        LOGGER.info("Radial cutoff applied (imitating beam attenuation)")
+
     if sum_peak:
         # This mainly to produce an image that mask out super extended sources (via sum-to-peak flux ratio)
         # This is useful to allow source finder to detect mainly point-like sources for cross-matching purposes only.
@@ -440,12 +449,6 @@ def main(
         LOGGER.info("Enforcing that mask to binary")
         mask_image = mask_image != 0
         mask_header["BUNIT"] = "mask"
-
-    # Apply radial cutoff if specified
-    if radial_cutoff:
-        LOGGER.info(f"Applying radial cutoff: {radial_cutoff} pixels from center")
-        mask_image = apply_radial_cutoff(mask_image, radial_cutoff)
-        LOGGER.info("Radial cutoff applied (imitating beam attenuation)")
 
     shutil.copyfile(input_file, out_mask_fits)  # to provide a template
     flush_fits(mask_image, out_mask_fits, mask_header)

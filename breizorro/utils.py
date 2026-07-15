@@ -260,8 +260,10 @@ def maxDist(contour, pixel_size, x_centroid, y_centroid):
     e_min = np.min(distances) * pixel_size
 
     # Calculate position angle
-    dx, dy = contour_array[max_idx] - [x_centroid, y_centroid]
-    pos_angle = np.degrees(np.arctan2(dy, dx))
+    dy, dx = contour_array[max_idx] - [y_centroid, x_centroid]
+    pos_angle = np.degrees(np.arctan2(dx, dy))
+    # Optional: constrain the angle to standard [0, 360) range if needed
+    pos_angle = pos_angle % 360
 
     return e_maj, e_min, pos_angle
 
@@ -294,7 +296,8 @@ def get_source_size(contour, pixel_size, mean_beam, image, int_peak_ratio, centr
     pos_angle = result[-1]
     contour_pixels = PixCoord([c[0] for c in contour], [c[1] for c in contour])
     p = PolygonPixelRegion(vertices=contour_pixels, meta={"label": "Region"})
-    source_beam_ratio = p.area / mean_beam
+    mean_beam_pix = max(float(mean_beam) / float(pixel_size), np.finfo(float).eps)
+    source_beam_ratio = p.area / ((np.pi / (4.0 * np.log(2.0))) * mean_beam_pix**2)
     # first test for point source
     point_source = False
     # if the peak ratio is very low or the source size is smaller than the beam, it's likely a point source

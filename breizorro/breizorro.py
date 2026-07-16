@@ -87,17 +87,9 @@ def resolve_island(isl_spec, mask_image, wcs, ignore_missing=False):
 
 def add_regions(mask_image, regs, wcs):
     for reg in regs:
-        if hasattr(reg, "to_pixel"):
+        if hasattr(reg, 'to_pixel'):
             reg = reg.to_pixel(wcs)
-        region_mask = reg.to_mask()
-        if region_mask is not None:
-            # Get ONLY the 2D shape (Y, X) of the image, ignoring Stokes/Freq axes
-            shape_2d = mask_image.shape[-2:]
-            slices = region_mask.bbox.get_overlap_slices(shape_2d)
-            if slices is not None:
-                large_slices, small_slices = slices
-                # Use ... to automatically handle the 1-sized extra dimensions
-                mask_image[..., large_slices[0], large_slices[1]] += region_mask.data[small_slices]
+        mask_image += reg.to_mask().to_image(mask_image.shape)
 
 
 def remove_regions(mask_image, regs, wcs):
@@ -112,16 +104,20 @@ def reproject_mask_to_reference(mask_data, mask_header, reference_image, referen
     shapes_match = mask_data.shape == reference_image.shape
 
     try:
-        mask_wcs = WCS(mask_header)
-        while len(mask_wcs.array_shape) > 2:
-            mask_wcs = mask_wcs.dropaxis(len(mask_wcs.array_shape) - 1)
+        # 1. Safely extract purely 2D spatial WCS
+        mask_wcs_2d = WCS(mask_header).celestial
+        ref_wcs_2d = reference_wcs.celestial
 
-        pixscale_match = np.allclose(reference_wcs.pixel_scale_matrix, mask_wcs.pixel_scale_matrix, rtol=1e-6)
-        crpix_match = np.allclose(reference_wcs.wcs.crpix, mask_wcs.wcs.crpix, rtol=1e-6)
-        crval_match = np.allclose(reference_wcs.wcs.crval, mask_wcs.wcs.crval, rtol=1e-9)
-        ctype_match = (reference_wcs.wcs.ctype == mask_wcs.wcs.ctype).all()
+        # 2. Squeeze data to 2D (removes the 1-sized Stokes/Freq axes)
+        mask_data_2d = mask_data.squeeze()
+        ref_shape_2d = reference_image.shape[-2:]
 
-        if shapes_match and pixscale_match and crpix_match and crval_match and ctype_match:
+        # Fast path check on 2D properties
+        pixscale_match = np.allclose(ref_wcs_2d.pixel_scale_matrix, mask_wcs_2d.pixel_scale_matrix, rtol=1e-6)
+        crpix_match = np.allclose(ref_wcs_2d.wcs.crpix, mask_wcs_2d.wcs.crpix, rtol=1e-6)
+        crval_match = np.allclose(ref_wcs_2d.wcs.crval, mask_wcs_2d.wcs.crval, rtol=1e-9)
+
+        if shapes_match and pixscale_match and crpix_match and crval_match:
             LOGGER.info("Mask shape and WCS match reference, skipping reprojection")
             return mask_data
 
@@ -130,13 +126,18 @@ def reproject_mask_to_reference(mask_data, mask_header, reference_image, referen
         else:
             LOGGER.info(f"Reprojecting mask from shape {mask_data.shape} to {reference_image.shape}")
 
-        reprojected, _ = reproject_interp(
-            (mask_data, mask_wcs),
-            reference_wcs,
-            shape_out=reference_image.shape,
+        # 3. Perform reprojection purely in 2D
+        reprojected_2d, _ = reproject_interp(
+            (mask_data_2d, mask_wcs_2d),
+            ref_wcs_2d,
+            shape_out=ref_shape_2d,
             order="nearest-neighbor",
         )
-        return np.nan_to_num(reprojected, nan=0.0)
+
+        # 4. Clean NaNs and reshape back to the original 3D/4D reference shape
+        reprojected_2d = np.nan_to_num(reprojected_2d, nan=0.0)
+        return reprojected_2d.reshape(reference_image.shape)
+
     except Exception as exc:
         LOGGER.warning(
             "Failed to reproject mask to reference WCS (%s). Falling back to shape match.",

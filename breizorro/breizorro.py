@@ -87,7 +87,7 @@ def resolve_island(isl_spec, mask_image, wcs, ignore_missing=False):
 
 def add_regions(mask_image, regs, wcs):
     for reg in regs:
-        if hasattr(reg, 'to_pixel'):
+        if hasattr(reg, "to_pixel"):
             reg = reg.to_pixel(wcs)
         mask_image += reg.to_mask().to_image(mask_image.shape)
 

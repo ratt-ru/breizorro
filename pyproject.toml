@@ -8,7 +8,7 @@ authors = [
 ]
 readme = "README.rst"
 license = { text = "GNU GPL v3" }
-requires-python = ">=3.9,<3.14"
+requires-python = ">=3.9,<=3.14"
 keywords = ["Astronomy", "Masking", "Imaging"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
@@ -22,6 +22,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Astronomy"
 ]
 dependencies = [
@@ -31,7 +32,7 @@ dependencies = [
     "omegaconf",
     "reproject",
     "regions>=0.8",
-    "scabha>=2.2.0rc0",
+    "scabha>=2.2.0rc2",
     "scipy>=1.13.1"
 ]
 

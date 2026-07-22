@@ -3,6 +3,8 @@ from multiprocessing import Pool
 from operator import itemgetter
 
 import numpy as np
+from astropy.coordinates import SkyCoord
+from astropy.wcs.utils import wcs_to_celestial_frame
 from photutils import centroids
 from regions import PolygonSkyRegion
 from tqdm import tqdm
@@ -167,7 +169,12 @@ def process_contour(contour, image_data, fitsinfo, noise_out, source_fitting="ce
             _centroids = centroid_com(data)
 
         centroid_x, centroid_y = _centroids
-        ra, dec = wcs.all_pix2world(centroid_x, centroid_y, 0)
+        world_x, world_y = wcs.all_pix2world(centroid_x, centroid_y, 0)
+        # The WCS's native frame isn't necessarily equatorial
+        # Converting through SkyCoord ensures ra/dec are genuine ICRS coordinates
+        native_frame = wcs_to_celestial_frame(wcs)
+        world_coord = SkyCoord(world_x, world_y, unit="deg", frame=native_frame).icrs
+        ra, dec = world_coord.ra.deg, world_coord.dec.deg
         # Ensure RA is positive
         if ra < 0:
             ra += 360

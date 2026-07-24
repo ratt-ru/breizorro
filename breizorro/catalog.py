@@ -142,9 +142,8 @@ def process_contour(contour, image_data, fitsinfo, noise_out, source_fitting="ce
     try:
         data = mask * image_data
         nndata = data  # np.flip(data, axis=0)
-        # nndata = nndata[~np.isnan(nndata)]
-        total_flux = np.sum(nndata[nndata != -0.0]) / pix_beam
-        peak_flux = nndata.max()
+        total_flux = np.nansum(nndata[nndata != -0.0]) / pix_beam
+        peak_flux = np.nanmax(nndata)
     except (ValueError, ZeroDivisionError):
         total_flux = 0.0
         peak_flux = 0.0
@@ -157,7 +156,7 @@ def process_contour(contour, image_data, fitsinfo, noise_out, source_fitting="ce
         ten_pc_error = 0.1 * total_flux  # a 10% error term as an additional conservative estimate
         beam_error = np.sqrt(source_beams) * noise_out
         flux_density_error = np.sqrt(ten_pc_error**2 + beam_error**2)  # combined error
-        peak_error = np.sqrt((0.1 * peak_flux) ** 2 + beam_error**2)
+        peak_error = np.sqrt((0.1 * peak_flux) ** 2 + noise_out**2)
 
         # Calculate weighted centroid using selected method
         centroid_method = get_centroid_method(source_fitting)

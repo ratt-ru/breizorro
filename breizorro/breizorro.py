@@ -59,7 +59,7 @@ def make_noise_map(restored_image, boxsize):
     noise = -scipy.ndimage.minimum_filter(restored_image, box) / ratio
     negative_mask = noise < 0.0
     noise[negative_mask] = 1.0e-10
-    median_noise = np.median(noise)
+    median_noise = np.nanmedian(noise)
     median_mask = noise < median_noise
     noise[median_mask] = median_noise
     LOGGER.info(f"Median noise value is {median_noise}")
@@ -413,7 +413,7 @@ def main(
         else:
             raise ValueError("No beam information found. Specify mean beam in arcsec: --beam-size 6.5")
 
-        noise = np.median(noise_image)
+        noise = np.nanmedian(noise_image)
         f = open(outcatalog, "w")
         catalog_out = f"# processing fits image: {restored_image}  \n"
         f.write(catalog_out)

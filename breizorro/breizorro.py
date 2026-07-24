@@ -384,7 +384,7 @@ def main(
             polygon_regions.append(polygon_region)
         LOGGER.info(f"Number of regions found: {len(polygon_regions)}")
         if outregion:
-            regions.Regions(polygon_regions).write(outregion, format="ds9")
+            regions.Regions(polygon_regions).write(outregion, format="ds9", overwrite=True)
             LOGGER.info(f"Saving regions in {outregion}")
 
     if outcatalog and restored_image:

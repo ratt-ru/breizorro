@@ -2,6 +2,10 @@ cabs:
   breizorro:
     info: "Mask creation and manipulation for radio astronomy images (https://github.com/ratt-ru/breizorro)"
     command: breizorro
+    image:
+      registry: ghcr.io
+      name: ratt-ru/breizorro
+      version: latest
     inputs:
       restored-image:
         info: "Restored image file from which to build the mask"
@@ -39,6 +43,11 @@ cabs:
         metavar: "MASK(s)|REG(s)"
         policies:
           repeat: '[]'
+      radial-cutoff:
+        info: "Zero out mask beyond this radius in pixels from center (imitates beam attenuation)"
+        dtype: float
+        metavar: "RADIUS"
+        abbreviation: rc
       number-islands:
         info: "Number the islands detected"
         dtype: bool
@@ -88,12 +97,18 @@ cabs:
         info: "Sum-to-peak ratio of flux islands to mask in original image"
         dtype: float
       ncpu:
-        info: "Number of processors to use for cataloging"
+        info: "Number of processors to use for cataloguing"
         dtype: int
         abbreviation: j
       beam-size:
         info: "Average beam size in arcsec if missing in the image header"
         dtype: float
+      source-fitting:
+        info: "Source fitting method for catalogue generation"
+        dtype: str
+        default: centroid
+        abbreviation: sf
+        choices: [centroid, gaussian, moments, windowed]
       gui:
         info: "Open mask in bokeh html gui"
         dtype: bool
@@ -107,7 +122,7 @@ cabs:
         abbreviation: o
         suppress_cli_default: true
       outcatalog:
-        info: "Generate a catalog based on the region mask"
+        info: "Generate a catalogue based on the region mask"
         dtype: File
         required: false
       outregion:
